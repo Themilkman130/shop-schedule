@@ -293,6 +293,11 @@ def plan_writes(desired: dict, board: dict, versions: dict, cfg: dict, now: date
         put("set", "config", "shop", data)
         summary["config_updated"] = 1
 
+    if live:
+        status = {"lastRun": now.astimezone(tz).isoformat(timespec="seconds"),
+                  "cars": len(desired["vehicles"]), "appointments": len(desired["appointments"])}
+        put("set", "config", "sync", status)
+
     missing = sorted(set(cfg["techs"]) - set(desired["techLabels"]))
     if missing:
         notes.append("no ShopMonkey user matched tech " + ", ".join(missing))

@@ -169,7 +169,7 @@ class PlanTests(unittest.TestCase):
         self.assertTrue(new and all(w["op"] == "set" and "if_version" not in w for w in new))
 
     def test_sample_techs_replaced_keeping_shop_hours(self):
-        cfgw = next(w for w in self.writes(self.plan()) if w["collection"] == "config")
+        cfgw = next(w for w in self.writes(self.plan()) if (w["collection"], w["doc_id"]) == ("config", "shop"))
         self.assertEqual([t["name"] for t in cfgw["data"]["techs"]], ["Ann B.", "Cal D."])
         self.assertEqual(cfgw["data"]["open"], "07:30")
         self.assertNotIn("sample", cfgw["data"])
@@ -187,7 +187,7 @@ class PlanTests(unittest.TestCase):
             else:
                 docs[w["doc_id"]].update(w["data"])
         second = plan_writes(d, b, self.versions(b), CFG, NOW)
-        self.assertEqual(self.writes(second), [])
+        self.assertEqual([(w["collection"], w["doc_id"]) for w in self.writes(second)], [("config", "sync")])
 
     def test_missing_version_is_an_error(self):
         b = self.board()
@@ -200,6 +200,7 @@ class PlanTests(unittest.TestCase):
         ops = {(w["collection"], w["doc_id"]) for w in self.writes(plan_writes(empty, b, self.versions(b), CFG, NOW))}
         self.assertNotIn(("vehicles", "s1"), ops)
         self.assertNotIn(("config", "shop"), ops)
+        self.assertNotIn(("config", "sync"), ops)
 
 
 if __name__ == "__main__":

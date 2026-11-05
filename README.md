@@ -12,6 +12,7 @@ works out which board documents to add, update or remove.
 | `shop_sync/fetch.py` | Pulls statuses, users, open orders, appointments, labor lines, vehicles and customers into one snapshot |
 | `shop_sync/sync.py` | Maps the snapshot onto board documents and plans the writes (pure functions, fully tested) |
 | `shop_sync/config.json` | Time zone, which ShopMonkey statuses count as in the shop or upcoming, tech names, limits |
+| `board/index.html` | Source of the board page (published to the artifact; keep the two in step) |
 | `tests/` | Unit tests on made-up data: `python3 -m unittest discover -s tests -t .` |
 
 ## Where the key comes from
@@ -30,6 +31,7 @@ Board documents written by the sync have `source: "shopmonkey"` and ids
   into authorized / not authorized.
 - **Board only (never written by the sync):** `spot`, `note`, `schedOrder`,
   `hoursLeft` (a manual override of ShopMonkey's hours).
+- **Each run** also sets `config/sync` (`lastRun`, counts); the board header shows it and turns red after 3 hours.
 - **Removed:** cars whose order is archived or leaves the in-shop statuses;
   appointments that have arrived, passed or been cancelled; pencilled jobs
   that match a ShopMonkey appointment (same customer, same Pacific day);
@@ -42,7 +44,7 @@ out of the repo (`runs/` is git-ignored).
 
 1. `python3 -m shop_sync fetch --out RUN/sm.json`
 2. Save the board with the artifact-database tool (`list` with `out_dir` = `RUN/board`)
-   for `vehicles` and `appointments`, and `get` `config/shop`. Write
+   for `vehicles`, `appointments` and `config` (holds `shop` and `sync`). Write
    `RUN/board/versions.json` mapping `"<collection>/<doc_id>"` to the
    `version` each listing reported.
 3. `python3 -m shop_sync plan --sm RUN/sm.json --board RUN/board --out RUN/plan`

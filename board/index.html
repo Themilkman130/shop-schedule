@@ -1,0 +1,639 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Shop Production Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: shop-signage header strip, a slot-finder bar, then day columns showing booked labor hours against tech capacity */
+:root{
+  --bg:#e9ebec; --panel:#f7f8f8; --card:#ffffff; --fg:#1c2226; --muted:#5d6870; --line:#cfd5d9;
+  --accent:#e2a400; --accent-ink:#1c1600; --ok:#2f8a4a; --warn:#b86e00; --bad:#c23a2b;
+  --chip:#e3e7ea;
+  /* one color per stage, white text, readable on light and dark */
+  --st0:#5b6670; --st1:#2f6fb5; --st2:#7a4fb0; --st3:#b5541f; --st4:#8a6500; --st5:#1d7f80; --st6:#2f8a4a;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --scale:1;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#15191c; --panel:#1c2125; --card:#242a2f; --fg:#e8ecee; --muted:#9aa5ad; --line:#323a40;
+  --accent:#f2b51d; --accent-ink:#1c1600; --ok:#5cc27a; --warn:#f0a23a; --bad:#ff6b5b; --chip:#2e353b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15191c; --panel:#1c2125; --card:#242a2f; --fg:#e8ecee; --muted:#9aa5ad; --line:#323a40;
+  --accent:#f2b51d; --accent-ink:#1c1600; --ok:#5cc27a; --warn:#f0a23a; --bad:#ff6b5b; --chip:#2e353b; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:calc(14px*var(--scale));display:flex;flex-direction:column}
+body.tv{--scale:1.35}
+button,select,textarea,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding-block:12px;border-bottom:4px solid var(--accent);background:var(--panel)}
+.brand{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 18px;min-width:0}
+h1{margin:0;font-family:var(--f-display);font-weight:700;font-size:2.1em;letter-spacing:.02em;text-transform:uppercase;line-height:1}
+.clock{font-family:var(--f-display);font-weight:600;font-size:1.9em;line-height:1;color:var(--fg);font-variant-numeric:tabular-nums;letter-spacing:.02em;white-space:nowrap}
+.clock .d{color:var(--muted);margin-right:.35em}
+.tally{display:flex;gap:16px;flex-wrap:wrap;margin-left:auto}
+.tally div{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05}
+.tally b{font-family:var(--f-display);font-size:1.9em;font-variant-numeric:tabular-nums}
+.tally span{font-size:.72em;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.tally .alert b{color:var(--bad)}
+.controls{display:flex;gap:8px;flex-wrap:wrap}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:7px 12px;cursor:pointer;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:7px 12px;cursor:pointer;font-weight:500}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn:disabled{opacity:.5;cursor:default}
+.link{border:0;background:none;padding:0;color:var(--bad);text-decoration:underline;cursor:pointer;font-size:.85em}
+
+.notice{padding-block:8px;background:var(--chip);color:var(--muted);font-size:.9em}
+.notice strong{color:var(--fg)}
+
+.finder{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding-block:12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.finder h2{margin:0;font-family:var(--f-display);font-weight:700;font-size:1.35em;text-transform:uppercase;letter-spacing:.04em}
+.finder label{display:flex;align-items:center;gap:8px;font-weight:500}
+.finder input{width:5.5em;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-size:1.15em;font-variant-numeric:tabular-nums}
+.quick{display:flex;gap:4px}
+.quick button{border:1px solid var(--line);background:var(--card);border-radius:5px;padding:5px 9px;cursor:pointer;font-variant-numeric:tabular-nums}
+.fits-list{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.fits-list .lbl{color:var(--muted);font-size:.9em}
+.fit{border:1px solid var(--ok);background:var(--card);border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600}
+.fit small{font-weight:400;color:var(--muted);margin-left:.4em}
+.finder .btn.primary{margin-left:auto}
+
+main{flex:1;min-height:0;overflow:auto;padding-block:14px}
+.lanes{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(calc(230px*var(--scale)),1fr);gap:12px;min-height:100%;align-items:start}
+.lane{background:var(--panel);border:1px solid var(--line);border-radius:8px;display:flex;flex-direction:column;min-width:0}
+.lane-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 12px 8px;border-bottom:1px solid var(--line)}
+.lane-h h2{margin:0;font-family:var(--f-display);font-weight:700;font-size:1.35em;text-transform:uppercase;letter-spacing:.04em}
+.lane-h .n{font-family:var(--f-display);font-size:1.35em;color:var(--muted);font-variant-numeric:tabular-nums}
+.lane-h .sub{font-size:.85em;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.stack{display:flex;flex-direction:column;gap:8px;padding:10px}
+.empty{color:var(--muted);font-size:.9em;padding:6px 2px}
+.lane.today{border-top:4px solid var(--accent)}
+.lane.stagelane{border-top:6px solid var(--stc)}
+
+.days{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(215px*var(--scale)),1fr));gap:10px;align-items:start}
+.lane.fits{box-shadow:0 0 0 3px var(--ok)}
+.open-h{font-family:var(--f-display);font-weight:700;font-size:1.35em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.open-h.full{color:var(--bad)} .open-h.tight{color:var(--warn)}
+.load{display:grid;gap:4px}
+.bar{height:12px;background:var(--chip);border-radius:6px;overflow:hidden;display:flex}
+.bar i{display:block;height:100%;background:var(--ok)}
+.bar i.carry{background:var(--muted)}
+.bar.tight i:not(.carry){background:var(--warn)} .bar.full i:not(.carry){background:var(--bad)}
+.load .meta{display:flex;justify-content:space-between;gap:6px}
+.fitflag{justify-self:start;font-size:.75em;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--card);background:var(--ok);border-radius:4px;padding:1px 7px}
+.grp{font-size:.72em;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;padding:2px 2px 0}
+.techs{display:grid;gap:4px;padding:6px 0 2px;border-top:1px solid var(--line)}
+.tech{display:grid;grid-template-columns:minmax(0,5.5em) 1fr 3.4em;gap:8px;align-items:center;font-size:.92em;border-radius:4px}
+.tech .tn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tech.off .tn{color:var(--muted);font-weight:500}
+.tech.pick{box-shadow:0 0 0 2px var(--ok);padding:0 4px}
+.tech .th{font-family:var(--f-mono);font-size:.85em;text-align:right;font-variant-numeric:tabular-nums}
+.tech .th.tight{color:var(--warn)} .tech .th.full{color:var(--bad)}
+.bar.mini{height:8px}
+.bar.mini.tight i{background:var(--warn)} .bar.mini.full i{background:var(--bad)}
+.hgrid{overflow-x:auto}
+.hgrid table{border-collapse:collapse;width:100%;min-width:30em}
+.hgrid th{font-size:.75em;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:left;font-weight:600;padding:0 4px 4px}
+.hgrid td{padding:3px 4px}
+.hgrid input{width:100%;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-variant-numeric:tabular-nums}
+.hgrid td.nm{min-width:7em}
+.hgrid td.h input{width:3.6em;text-align:center}
+
+.spots{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(220px*var(--scale)),1fr));gap:12px}
+.spot.bay .lane-h h2::before{content:"";display:inline-block;width:.5em;height:.5em;background:var(--accent);margin-right:.4em;vertical-align:.12em}
+.spot.open{border-style:dashed}
+.spot.open .lane-h h2{color:var(--muted)}
+
+.card{width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--muted);
+  border-radius:6px;padding:9px 10px;cursor:pointer;display:grid;gap:4px}
+.card:hover{border-color:var(--muted)}
+.card.s-ok,.item.s-ok{border-left-color:var(--ok)} .card.s-warn,.item.s-warn{border-left-color:var(--warn)} .card.s-bad,.item.s-bad{border-left-color:var(--bad)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.ro{font-family:var(--f-mono);font-size:.82em;color:var(--muted)}
+.where{font-family:var(--f-display);font-weight:700;font-size:1.05em;text-transform:uppercase;letter-spacing:.04em;
+  background:var(--fg);color:var(--bg);border-radius:4px;padding:1px 7px;white-space:nowrap}
+.where.lot{background:var(--chip);color:var(--fg)}
+.veh{font-weight:600;font-size:1.08em;line-height:1.2;overflow-wrap:anywhere}
+.meta{color:var(--muted);font-size:.88em;overflow-wrap:anywhere}
+.age{font-variant-numeric:tabular-nums;font-size:.85em;font-weight:500}
+.age.warn{color:var(--warn)} .age.bad{color:var(--bad)}
+.note{font-size:.85em;background:var(--chip);border-radius:4px;padding:4px 6px;overflow-wrap:anywhere}
+.stage{justify-self:start;display:inline-block;font-family:var(--f-display);font-weight:700;font-size:1.15em;line-height:1.15;text-transform:uppercase;letter-spacing:.04em;
+  color:#fff;background:var(--stc,var(--st0));border-radius:4px;padding:2px 9px;white-space:nowrap}
+.st0{--stc:var(--st0)}.st1{--stc:var(--st1)}.st2{--stc:var(--st2)}.st3{--stc:var(--st3)}.st4{--stc:var(--st4)}.st5{--stc:var(--st5)}.st6{--stc:var(--st6)}
+
+.item{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:start;width:100%;text-align:left;
+  background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px 10px;border-left:6px solid var(--line)}
+button.item{cursor:pointer}
+button.item:hover{border-color:var(--muted)}
+.item.appt{border-left-color:var(--accent)}
+.item.tent{border-style:dashed;border-left-style:dashed}
+.item .t{font-family:var(--f-display);font-weight:700;font-size:1.2em;line-height:1.1;font-variant-numeric:tabular-nums;min-width:3.4em}
+.item .body{display:grid;gap:3px;min-width:0}
+.item .veh{font-size:1em}
+.hrs{font-family:var(--f-mono);font-size:.82em;background:var(--chip);border-radius:4px;padding:1px 6px;white-space:nowrap}
+.tag{font-size:.72em;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--warn)}
+
+.state{margin:auto;max-width:34em;text-align:center;color:var(--muted);padding:40px 0;display:grid;gap:10px;justify-items:center}
+.state h2{font-family:var(--f-display);text-transform:uppercase;color:var(--fg);margin:0}
+
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg);padding:0;width:min(460px,calc(100% - 32px))}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.dlg-h{padding:14px 16px;border-bottom:1px solid var(--line)}
+.dlg-h h2{margin:0;font-family:var(--f-display);text-transform:uppercase;font-size:1.5em}
+.dlg-b{padding:14px 16px;display:grid;gap:12px}
+.dlg-b label{display:grid;gap:4px;font-size:.8em;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.dlg-b select,.dlg-b textarea,.dlg-b input{text-transform:none;letter-spacing:0;font-size:1.1em;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--card);min-width:0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.picks{display:flex;flex-wrap:wrap;gap:6px}
+.picks button{border:1px solid var(--line);background:var(--card);border-radius:5px;padding:6px 9px;cursor:pointer;font-size:1.05em;text-transform:none;letter-spacing:0}
+.picks button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.dlg-f{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+.err{color:var(--bad);font-size:.9em}
+.trow{display:grid;grid-template-columns:1fr 5em 5em auto;gap:8px;align-items:end}
+.trow input{width:100%}
+.trow-h{display:grid;grid-template-columns:1fr 5em 5em auto;gap:8px;font-size:.75em;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.tload{display:grid;gap:0;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.tload:last-child{border-bottom:0}
+.dlg-stage{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cap-sum{font-variant-numeric:tabular-nums;color:var(--muted);font-size:.9em}
+#sdlg{width:min(640px,calc(100% - 32px))}
+@media (max-width:640px){.tally{margin-left:0}.lanes{grid-auto-columns:minmax(78vw,1fr)}.finder .btn.primary{margin-left:0}}
+@media (prefers-reduced-motion:no-preference){.card,.item{transition:border-color .15s}}
+/* scheduling layout: unassigned bucket beside the day columns */
+.sched{display:grid;grid-template-columns:minmax(calc(230px*var(--scale)),280px) 1fr;gap:12px;align-items:start}
+.bucket{display:grid;gap:12px;position:sticky;top:0}
+.bucket .lane-h h2{font-size:1.2em}
+.lane.unas{border-top:4px solid var(--warn)}
+.lane.hold{border-top:4px solid var(--st3)}
+.tblock{display:grid;gap:6px;padding-top:8px;border-top:1px solid var(--line)}
+.tblock:first-of-type{border-top:0;padding-top:0}
+.seg-item{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;align-items:start;background:var(--card);border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:6px;padding:6px 8px}
+.seg-item.veh{border-left-color:var(--st4)}
+.seg-item.tent{border-style:dashed}
+.seg-item .h{font-family:var(--f-display);font-weight:700;font-size:1.15em;font-variant-numeric:tabular-nums;min-width:2.6em}
+.seg-item .body{display:grid;gap:1px;min-width:0}
+.seg-item .veh{font-size:.98em}
+.part{font-size:.75em;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--st1)}
+.mv{display:grid;gap:2px}
+.mv button{border:1px solid var(--line);background:var(--panel);border-radius:4px;width:1.9em;height:1.6em;cursor:pointer;line-height:1;font-size:.85em;color:var(--muted)}
+.mv button:hover{color:var(--fg);border-color:var(--muted)}
+.mv button:disabled{opacity:.3;cursor:default}
+body.tv .mv{display:none}
+.warnline{font-size:.85em;color:var(--warn);font-weight:600}
+.assign{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.assign select{padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:var(--panel);font-size:.9em}
+.preview{font-weight:600;color:var(--ok);font-size:.95em}
+.preview.none{color:var(--warn)}
+.fit{display:grid;text-align:left;gap:1px}
+.fit small{margin-left:0}
+@media (max-width:760px){.sched{grid-template-columns:1fr}.bucket{position:static}}
+</style>
+
+<header class="gut">
+  <div class="brand"><h1>Shop Schedule</h1><span class="clock" id="clock"></span></div>
+  <div class="controls">
+    <div class="seg" role="group" aria-label="View">
+      <button data-view="schedule" aria-pressed="true">Schedule</button>
+      <button data-view="today" aria-pressed="false">Today</button>
+      <button data-view="stage" aria-pressed="false">By stage</button>
+      <button data-view="spot" aria-pressed="false">By spot</button>
+    </div>
+    <button class="btn" id="cap-btn" type="button">Shop &amp; tech hours</button>
+    <button class="btn" id="tv-btn" aria-pressed="false">TV mode</button>
+  </div>
+  <div class="tally" id="tally"></div>
+</header>
+<div class="notice gut" id="notice" hidden><strong>Sample data.</strong> Live ShopMonkey work orders and appointments replace these once the sync is connected.</div>
+<section class="finder gut" id="finder" hidden>
+  <h2>Find a slot</h2>
+  <label for="f-hours">Job needs <input id="f-hours" type="number" min="0.5" step="0.5" value="2"> labor hours</label>
+  <div class="quick" id="quick"><button type="button" data-h="1">1</button><button type="button" data-h="2">2</button><button type="button" data-h="4">4</button><button type="button" data-h="8">8</button><button type="button" data-h="12">12</button></div>
+  <div class="fits-list" id="fits"></div>
+  <button class="btn primary" id="pencil-btn" type="button">Pencil in a job</button>
+</section>
+<main id="main" class="gut"><div class="state"><h2>Loading the schedule</h2>Days and bookings appear here as soon as the board connects.</div></main>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <div class="dlg-h"><div class="ro" id="d-ro"></div><h2 id="d-veh"></h2><div class="meta" id="d-meta"></div></div>
+    <div class="dlg-b">
+      <div class="dlg-stage"><span class="meta">Stage</span> <span id="d-stage"></span> <span class="meta">· changes in ShopMonkey</span></div>
+      <div class="meta" id="d-hours"></div>
+      <label>Spot<div class="picks" id="d-spot"></div></label>
+      <label for="d-left">Hours left on the board<input id="d-left" type="number" min="0" step="0.5" placeholder="Leave blank to use ShopMonkey's"></label>
+      <label for="d-note">Note on the board<input id="d-note" maxlength="80" placeholder="e.g. Waiting on rotors, ETA 2pm"></label>
+      <div class="err" id="d-err" hidden></div>
+    </div>
+    <div class="dlg-f"><button class="btn" type="button" id="d-cancel">Cancel</button><button class="btn primary" id="d-save" type="button">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="pdlg">
+  <form method="dialog">
+    <div class="dlg-h"><h2>Pencil in a job</h2><div class="meta">Holds the time on this board until it's booked in ShopMonkey.</div></div>
+    <div class="dlg-b">
+      <div class="two">
+        <label for="p-date">Drop-off day<select id="p-date"></select></label>
+        <label for="p-time">Drop-off time<input id="p-time" type="time" value="08:00"></label>
+      </div>
+      <div class="two">
+        <label for="p-tech">Tech<select id="p-tech"></select></label>
+        <label for="p-hours">Labor hours<input id="p-hours" type="number" min="0.5" step="0.5"></label>
+      </div>
+      <div class="preview" id="p-prev"></div>
+      <label for="p-cust">Customer<input id="p-cust" maxlength="60" placeholder="Last name"></label>
+      <label for="p-veh">Vehicle<input id="p-veh" maxlength="60" placeholder="e.g. 2019 Ford F-150"></label>
+      <label for="p-svc">Work<input id="p-svc" maxlength="60" placeholder="e.g. Front brakes"></label>
+      <div class="err" id="p-err" hidden></div>
+    </div>
+    <div class="dlg-f"><button class="btn" type="button" id="p-cancel">Cancel</button><button class="btn primary" id="p-save" type="button">Pencil in</button></div>
+  </form>
+</dialog>
+
+<dialog id="sdlg">
+  <form method="dialog">
+    <div class="dlg-h"><h2>Shop &amp; tech hours</h2><div class="meta">Open Monday to Friday. Each tech's daily labor limit can't exceed the shop's work hours.</div></div>
+    <div class="dlg-b">
+      <div class="two">
+        <label for="s-open">Opens<input id="s-open" type="time" value="08:00"></label>
+        <label for="s-close">Closes<input id="s-close" type="time" value="17:00"></label>
+      </div>
+      <div class="two">
+        <label for="s-lunch">Lunch starts<input id="s-lunch" type="time" value="12:00"></label>
+        <label for="s-lunchh">Lunch length (h)<input id="s-lunchh" type="number" min="0" max="3" step="0.25" value="1"></label>
+      </div>
+      <div class="cap-sum" id="s-len"></div>
+      <div class="hgrid" id="s-rows"></div>
+      <button class="btn" type="button" id="s-add">Add tech</button>
+      <div class="cap-sum" id="s-sum"></div>
+      <div class="err" id="s-err" hidden></div>
+    </div>
+    <div class="dlg-f"><button class="btn" type="button" id="s-cancel">Cancel</button><button class="btn primary" id="s-save" type="button">Save</button></div>
+  </form>
+</dialog>
+
+<script>
+/* Stages are ShopMonkey's workflow statuses for cars on the lot; the sync keeps them current. */
+const STAGES=["Diagnosis","Service Advisor Review","Parts Hold","In Progress","Kniesels In Process","Completed / File Review","Ready For Pickup"];
+const READY="Ready For Pickup";
+const SPOTS=["Bay 1","Bay 2","Bay 3","Bay 4","Bay 5","Bay 6","Front lot","Back lot"];
+const HOLD=["Service Advisor Review","Parts Hold"];
+const LIMITS={"Diagnosis":[3,6],"Service Advisor Review":[2,24],"Parts Hold":[24,72],"In Progress":[8,24],"Kniesels In Process":[24,72],"Completed / File Review":[2,8],"Ready For Pickup":[24,72]};
+const VIEWS=["schedule","today","stage","spot"];
+const WORK=[1,2,3,4,5],DOW_NAMES={1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri"};
+const DAYS_SHOWN=10,HORIZON=60,EPS=1e-6;
+
+let vehicles=[], appts=[], cfg=null, syncInfo=null, view="schedule", db=null, canWrite=true, editing=null, draft={}, techDraft=[], rmArmed=null;
+const $=id=>document.getElementById(id);
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+const num=x=>{const n=parseFloat(x);return isFinite(n)?n:0};
+const fmtH=h=>{const r=Math.round(h*10)/10;return (Number.isInteger(r)?r:r.toFixed(1))};
+function hoursSince(iso){const t=Date.parse(iso);return isNaN(t)?0:(Date.now()-t)/36e5}
+function fmtAge(h){if(h<1)return Math.max(1,Math.round(h*60))+"m";if(h<48)return Math.floor(h)+"h "+Math.round((h%1)*60)+"m";return Math.floor(h/24)+"d "+Math.floor(h%24)+"h"}
+function level(v){const h=hoursSince(v.stageSince),[w,b]=LIMITS[v.stage]||[8,24];
+  const late=v.promised&&Date.parse(v.promised)<Date.now()&&v.stage!==READY;
+  if(late||h>=b)return"bad";if(h>=w)return"warn";return"ok"}
+function dayStart(d){const x=new Date(d);x.setHours(0,0,0,0);return x}
+function sameDay(iso,d){const t=new Date(iso);return !isNaN(t)&&t.toDateString()===d.toDateString()}
+function fmtTime(iso){return new Date(iso).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}
+function fmtDay(d){return new Date(d).toLocaleDateString([], {weekday:"short",month:"short",day:"numeric"})}
+const wd=d=>new Date(d).toLocaleDateString([], {weekday:"short"});
+function fmtPromise(iso){if(!iso)return"";const d=new Date(iso);return (d.toDateString()===new Date().toDateString()?"Due ":"Due "+wd(d)+" ")+fmtTime(iso)}
+function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function fromYmd(s){const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
+const byTime=k=>(a,b)=>Date.parse(a[k])-Date.parse(b[k]);
+function stCls(s){const i=STAGES.indexOf(s);return i<0?"st0":"st"+i}
+function stagePill(s){return `<span class="stage ${stCls(s)}">${esc(s||"No stage")}</span>`}
+function vehName(a){return a.vehicle||[a.year,a.make,a.model].filter(Boolean).join(" ")}
+const hasNum=x=>x!==null&&x!==undefined&&x!==""&&isFinite(parseFloat(x));
+/* Hours left on a car or booking, split into one share per tech plus an unassigned share.
+   ShopMonkey rows carry techHours; a number typed into "Hours left" on the board overrides
+   ShopMonkey's total and scales every share to match. */
+function shares(x,kind){
+  const synced=x.source==="shopmonkey";
+  const total=synced?num(kind==="veh"?x.smHoursLeft:x.hours):num(kind==="veh"?x.hoursLeft:x.hours);
+  const totalAuth=synced?num(kind==="veh"?x.smAuthHoursLeft:x.authHours):0;
+  const want=kind==="veh"&&synced&&hasNum(x.hoursLeft)?Math.max(0,num(x.hoursLeft)):total;
+  if(!synced||total<=0)return {total:want,auth:Math.min(totalAuth,want),parts:want>0?[{tech:x.tech||"",h:want,a:0}]:[]};
+  const f=want/total,parts=[];
+  Object.entries(x.techHours||{}).forEach(([t,v])=>{if(num(v.left)>0)parts.push({tech:t,h:num(v.left)*f,a:num(v.auth)*f})});
+  if(num(x.unassignedHours)>0)parts.push({tech:"",h:num(x.unassignedHours)*f,a:num(x.unassignedAuthHours)*f});
+  return {total:want,auth:totalAuth*f,parts}}
+function hoursLine(sh){return sh.total>0?`${fmtH(sh.total)} h left · ${fmtH(sh.auth)} h authorized`:"No labor hours left"}
+function techLine(x){const t=Object.entries(x.techHours||{}).filter(([,v])=>num(v.left)>0).map(([n,v])=>`${n} ${fmtH(num(v.left))} h`);
+  if(num(x.unassignedHours)>0)t.push(`Unassigned ${fmtH(num(x.unassignedHours))} h`);
+  return t.length?t.join(" · "):(x.tech||"")}
+function orderFor(src,tech){const o=src.schedOrder;return o&&typeof o==="object"?o[tech||"_"]:o}
+
+/* ---------- shop hours ---------- */
+const tmin=s=>{const [h,m]=String(s||"0:0").split(":").map(Number);return (h||0)*60+(m||0)};
+function shop(){const c=cfg||{};return {open:c.open||"08:00",close:c.close||"17:00",lunchStart:c.lunchStart||"12:00",lunchHours:c.lunchHours!=null?num(c.lunchHours):1}}
+function lenOf(s){return Math.max(0,(tmin(s.close)-tmin(s.open))/60-s.lunchHours)}
+function dayLen(){return lenOf(shop())}
+function remainingToday(){const s=shop(),n=new Date(),now=n.getHours()*60+n.getMinutes(),o=tmin(s.open),c=tmin(s.close);
+  const from=Math.max(now,o);if(from>=c)return 0;const ls=tmin(s.lunchStart),le=ls+s.lunchHours*60;
+  const ov=Math.max(0,Math.min(c,le)-Math.max(from,ls));return Math.max(0,(c-from-ov)/60)}
+function techList(){return cfg&&Array.isArray(cfg.techs)?cfg.techs.filter(t=>t&&t.name):[]}
+function techLimit(t,dow){if(!WORK.includes(dow))return 0;
+  const h=t.hours&&t.hours[dow]!=null?num(t.hours[dow]):t.weekday!=null?num(t.weekday):dayLen();
+  return Math.min(Math.max(0,h),dayLen())}
+function workDays(n){const out=[],d=dayStart(new Date());for(let i=0;i<n*2+14&&out.length<n;i++){if(WORK.includes(d.getDay()))out.push(new Date(d));d.setDate(d.getDate()+1)}return out}
+function matchTech(name){if(!name)return null;const n=String(name).trim().toLowerCase();return techList().find(t=>t.name.trim().toLowerCase()===n)||null}
+
+/* ---------- scheduling engine ----------
+   Each tech works their own queue in order. A job starts no earlier than its drop-off day,
+   uses that tech's free hours each workday, and rolls into the next workday until done. */
+function buildSchedule(){
+  const days=workDays(HORIZON),t0=dayStart(new Date()).getTime();
+  const idxFor=d=>{const t=dayStart(d).getTime();if(t<=t0)return 0;const i=days.findIndex(x=>x.getTime()>=t);return i<0?days.length:i};
+  const techs=techList().map(t=>({name:t.name,cap:days.map((d,i)=>{let c=techLimit(t,d.getDay());if(i===0&&d.getTime()===t0)c=Math.min(c,remainingToday());return c}),used:days.map(()=>0)}));
+  const jobs=[],unassigned=[],hold=[];
+  vehicles.forEach(v=>{const sh=shares(v,"veh");if(sh.total<=0)return;
+    const base={path:"vehicles/"+v.id,kind:"veh",src:v,release:0,tentative:false,
+      label:[v.year,v.make,v.model].filter(Boolean).join(" "),sub:"RO "+(v.ro||"")+" · "+(v.customer||""),def:Date.parse(v.stageSince||0)-1e13};
+    if(HOLD.includes(v.stage)){hold.push({...base,key:"v:"+v.id,tech:techLine(v),hours:sh.total,auth:sh.auth});return}
+    sh.parts.forEach(p=>jobs.push({...base,key:"v:"+v.id+":"+p.tech,tech:p.tech,hours:p.h,auth:p.a,order:orderFor(v,p.tech)}))});
+  appts.forEach(a=>{const release=idxFor(new Date(a.start));if(release>=days.length)return;
+    const sh=shares(a,"appt"),base={path:"appointments/"+a.id,kind:"appt",src:a,release,tentative:!!a.tentative,label:vehName(a),
+      sub:[a.customer,a.service].filter(Boolean).join(" · "),def:Date.parse(a.start),dropDay:dayStart(new Date(a.start))};
+    if(!sh.parts.length){jobs.push({...base,key:"a:"+a.id+":",tech:a.tech||"",hours:0,auth:0,order:orderFor(a,a.tech)});return}
+    sh.parts.forEach(p=>jobs.push({...base,key:"a:"+a.id+":"+p.tech,tech:p.tech,hours:p.h,auth:p.a,order:orderFor(a,p.tech)}))});
+  const queues={};techs.forEach(t=>queues[t.name]=[]);
+  jobs.forEach(j=>{const t=matchTech(j.tech);if(!t||j.hours<=0){unassigned.push(j);return}j.techName=t.name;queues[t.name].push(j)});
+  const key=j=>j.order!=null&&isFinite(j.order)?Number(j.order):j.def;
+  techs.forEach(T=>{const q=queues[T.name].sort((a,b)=>key(a)-key(b));
+    q.forEach(j=>{let rem=j.hours;j.parts=[];for(let i=j.release;i<days.length&&rem>EPS;i++){const free=T.cap[i]-T.used[i];if(free<=EPS)continue;
+        const take=Math.min(free,rem);T.used[i]+=take;rem-=take;j.parts.push({i,h:take})}
+      j.unfinished=rem>EPS;j.finish=j.parts.length?j.parts[j.parts.length-1].i:null})});
+  unassigned.sort((a,b)=>a.def-b.def);
+  return {days,techs,queues,unassigned,hold,key}}
+/* where would a new job land for one tech, after everything already queued */
+function project(S,techName,release,hours){const T=S.techs.find(t=>t.name===techName);if(!T||hours<=0)return null;
+  let rem=hours,start=null,end=null;for(let i=release;i<S.days.length&&rem>EPS;i++){const free=T.cap[i]-T.used[i];if(free<=EPS)continue;if(start==null)start=i;rem-=Math.min(free,rem);end=i}
+  return rem>EPS?{start,end:null}:{start,end}}
+
+/* ---------- items ---------- */
+function card(v,showStage){
+  const lv=level(v),h=hoursSince(v.stageSince),isLot=/lot/i.test(v.spot||"");
+  return `<button class="card s-${lv}" data-id="${esc(v.id)}" type="button">
+    <div class="row"><span class="ro">RO ${esc(v.ro)}</span><span class="where${isLot?" lot":""}">${esc(v.spot||"No spot")}</span></div>
+    <div class="veh">${esc(v.year)} ${esc(v.make)} ${esc(v.model)}</div>
+    ${v.color?`<div class="meta">${esc(v.color)}</div>`:""}
+    <div class="meta">${esc(v.customer)}</div>
+    ${showStage?stagePill(v.stage):""}
+    <div class="row"><span class="hrs">${esc(hoursLine(shares(v,"veh")))}</span></div>
+    ${techLine(v)?`<div class="meta">${esc(techLine(v))}</div>`:""}
+    <div class="row"><span class="age ${lv==="ok"?"":lv}">${fmtAge(h)} in stage</span><span class="meta">${esc(fmtPromise(v.promised))}</span></div>
+    ${v.note?`<div class="note">${esc(v.note)}</div>`:""}
+  </button>`}
+function apptItem(a){return `<div class="item appt${a.tentative?" tent":""}"><span class="t">${esc(fmtTime(a.start))}</span><div class="body">
+  <div class="veh">${esc(vehName(a))}</div>
+  <div class="meta">${esc(a.customer)}${a.service?" · "+esc(a.service):""}</div>
+  <div class="row"><span>${num(a.hours)?`<span class="hrs">${esc(hoursLine(shares(a,"appt")))}</span>`:`<span class="hrs">hours?</span>`} <span class="meta">${esc(techLine(a)||"Unassigned")}</span></span></div></div></div>`}
+function dueItem(v,showDay){const lv=v.stage===READY?"ok":level(v);
+  return `<button class="item card-due s-${lv}" data-id="${esc(v.id)}" type="button"><span class="t">${esc(showDay?fmtDay(v.promised):fmtTime(v.promised))}</span><div class="body">
+  <div class="veh">${esc(v.year)} ${esc(v.make)} ${esc(v.model)}</div>
+  <div class="meta">RO ${esc(v.ro)} · ${esc(v.customer)}</div>${stagePill(v.stage)}</div></button>`}
+function lane(title,sub,items,cls=""){return `<section class="lane ${cls}"><div class="lane-h"><h2>${title}</h2><span class="sub">${sub}</span></div>
+  <div class="stack">${items||`<div class="empty">None</div>`}</div></section>`}
+function segItem(S,j,p,q,qi){const n=j.parts.length,k=j.parts.indexOf(p)+1;
+  const partTxt=n>1?`Day ${k} of ${n} · done ${wd(S.days[j.finish])}`:j.unfinished?"Runs past the schedule":"";
+  return `<div class="seg-item ${j.kind}${j.tentative?" tent":""}"><span class="h">${fmtH(p.h)} h</span><div class="body">
+    <div class="veh">${esc(j.label||"Job")}</div><div class="meta">${esc(j.sub)}${j.kind==="veh"?" · in shop":""}${j.tentative?" · pencilled":""}</div>
+    ${j.auth>EPS?`<span class="meta">${fmtH(j.auth)} of ${fmtH(j.hours)} h authorized</span>`:""}
+    ${partTxt?`<span class="part">${esc(partTxt)}</span>`:""}
+    ${j.tentative&&k===1?`<button type="button" class="link" data-rm="${esc(j.src.id)}">${rmArmed===j.src.id?"Tap again to remove":"Remove"}</button>`:""}</div>
+    <div class="mv"><button type="button" title="Move earlier in ${esc(j.techName)}'s line" aria-label="Move earlier" data-mv="up" data-key="${esc(j.key)}" ${qi===0||!canWrite?"disabled":""}>&#9650;</button>
+    <button type="button" title="Move later in ${esc(j.techName)}'s line" aria-label="Move later" data-mv="down" data-key="${esc(j.key)}" ${qi===q.length-1||!canWrite?"disabled":""}>&#9660;</button></div></div>`}
+function bucketItem(j){const drop=j.kind==="veh"?"In shop now":"Drops off "+fmtDay(j.src.start);
+  const opts=techList().map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
+  return `<div class="seg-item ${j.kind}${j.tentative?" tent":""}"><span class="h">${j.hours>0?fmtH(j.hours)+" h":"?"}</span><div class="body">
+    <div class="veh">${esc(j.label||"Job")}</div><div class="meta">${esc(j.sub)}</div>${j.auth>EPS?`<div class="meta">${fmtH(j.auth)} h authorized</div>`:""}<div class="meta">${esc(drop)}${j.tech&&!matchTech(j.tech)?` · tech "${esc(j.tech)}" not on the hours list`:""}</div>
+    ${j.hours<=0?`<span class="warnline">Needs labor hours</span>`:""}
+    ${j.tentative?`<div class="assign"><select data-assign="${esc(j.src.id)}" aria-label="Assign tech"><option value="">Assign to…</option>${opts}</select>
+      <button type="button" class="link" data-rm="${esc(j.src.id)}">${rmArmed===j.src.id?"Tap again to remove":"Remove"}</button></div>`
+      :`<span class="meta">${j.src.source==="shopmonkey"&&j.hours>0?"No tech on these labor lines. Assign one in ShopMonkey":"Assign the tech in ShopMonkey"}</span>`}</div><span></span></div>`}
+
+/* ---------- views ---------- */
+function needHours(){return Math.max(0,num($("f-hours").value))}
+function renderSchedule(main,S){
+  if(!S.techs.length){main.innerHTML=`<div class="state"><h2>Add your techs</h2>The schedule needs each tech's daily labor limit to plan the days.<button class="btn primary" type="button" data-cap="1">Set shop &amp; tech hours</button></div>`;$("fits").innerHTML="";return}
+  const need=needHours();
+  if(need>0){const opts=S.techs.map(t=>({t:t.name,p:project(S,t.name,0,need)})).filter(o=>o.p&&o.p.end!=null).sort((a,b)=>a.p.end-b.p.end||a.p.start-b.p.start);
+    $("fits").innerHTML=opts.length?`<span class="lbl">Soonest:</span>${opts.slice(0,3).map(o=>`<button type="button" class="fit" data-date="${ymd(S.days[o.p.start])}" data-tech="${esc(o.t)}">${esc(o.t)}
+      <small>Starts ${esc(fmtDay(S.days[o.p.start]))} · done ${esc(o.p.end===o.p.start?"same day":wd(S.days[o.p.end]))}</small></button>`).join("")}`
+      :`<span class="lbl">No tech can finish a ${fmtH(need)} h job in the next ${HORIZON} workdays.</span>`}else $("fits").innerHTML="";
+  const shown=S.days.slice(0,DAYS_SHOWN),t0=dayStart(new Date()).getTime();
+  const dayCols=shown.map((d,i)=>{
+    const cap=S.techs.reduce((s,t)=>s+t.cap[i],0),used=S.techs.reduce((s,t)=>s+t.used[i],0),open=cap-used;
+    const t=cap<=0?"full":used/cap>=1-EPS?"full":used/cap>=.8?"tight":"ok";
+    const drops=appts.filter(a=>sameDay(a.start,d)).length,outs=vehicles.filter(v=>v.promised&&sameDay(v.promised,d)).length;
+    const unas=S.unassigned.filter(j=>j.kind==="appt"&&j.release===i);
+    const isToday=d.getTime()===t0;
+    const blocks=S.techs.map(T=>{const q=S.queues[T.name],c=T.cap[i],u=T.used[i],pct=c?Math.min(100,u/c*100):0,cl=c&&u/c>=1-EPS?"full":c&&u/c>=.8?"tight":"";
+      const segs=[];q.forEach((j,qi)=>j.parts.forEach(p=>{if(p.i===i)segs.push(segItem(S,j,p,q,qi))}));
+      return `<div class="tblock"><div class="tech${c<=0?" off":""}"><span class="tn">${esc(T.name)}</span>
+        ${c<=0?`<span class="meta">${isToday&&techLimit(techList().find(x=>x.name===T.name),d.getDay())>0?"Day's over":"Off"}</span><span></span>`:`<div class="bar mini ${cl}"><i style="width:${pct}%"></i></div><span class="th ${cl}">${fmtH(Math.max(0,c-u))} h</span>`}</div>
+        ${segs.join("")}</div>`}).join("");
+    return `<section class="lane ${isToday?"today":""}"><div class="lane-h"><h2>${wd(d)} ${d.getDate()}${isToday?" · Today":""}</h2><span class="open-h ${t==="ok"?"":t}">${fmtH(Math.max(0,open))} h open</span></div>
+      <div class="stack"><div class="load"><div class="bar ${t}"><i style="width:${cap?Math.min(100,used/cap*100):100}%"></i></div>
+        <div class="meta"><span>${fmtH(used)} of ${fmtH(cap)} h booked${isToday?" (rest of today)":""}</span><span>${drops} in · ${outs} out</span></div></div>
+      ${unas.length?`<div class="warnline">${unas.length} job${unas.length>1?"s":""} · ${fmtH(unas.reduce((s,j)=>s+j.hours,0))} h unassigned</div>`:""}
+      ${blocks}</div></section>`}).join("");
+  const held={};S.hold.forEach(j=>shares(j.src,"veh").parts.forEach(p=>{if(p.tech){held[p.tech]=held[p.tech]||[0,0];held[p.tech][0]+=p.h;held[p.tech][1]+=p.a}}));
+  const load=S.techs.map(T=>{let h=0,a=0;S.queues[T.name].forEach(j=>{h+=j.hours;a+=j.auth||0});const o=held[T.name]||[0,0];return [T.name,h,a,o[0],o[1]]});
+  const loadLane=lane("Tech totals","hours left",load.map(([n,h,a,oh,oa])=>`<div class="tload"><div class="tech"><span class="tn">${esc(n)}</span><span></span><span class="th">${fmtH(h+oh)} h</span></div>
+    <div class="meta">${fmtH(h)} scheduled · ${fmtH(oh)} on hold · ${fmtH(a+oa)} authorized</div></div>`).join(""),"");
+  const bucket=`<aside class="bucket">
+    ${loadLane}
+    ${lane("Unassigned",`${S.unassigned.length} · ${fmtH(S.unassigned.reduce((s,j)=>s+j.hours,0))} h`,S.unassigned.map(bucketItem).join(""),"unas")}
+    ${lane("On hold",`${S.hold.length} · ${fmtH(S.hold.reduce((s,j)=>s+j.hours,0))} h`,S.hold.map(j=>`<button type="button" class="seg-item veh card-due" data-id="${esc(j.src.id)}" style="text-align:left;cursor:pointer"><span class="h">${fmtH(j.hours)} h</span><div class="body"><div class="veh">${esc(j.label)}</div><div class="meta">${esc(j.sub)}${j.tech?" · "+esc(j.tech):""}</div>${stagePill(j.src.stage)}</div><span></span></button>`).join(""),"hold")}
+  </aside>`;
+  main.innerHTML=`<div class="sched">${bucket}<div class="days">${dayCols}</div></div>`}
+function renderToday(main){
+  const now=new Date(),t0=dayStart(now);
+  const arriving=appts.filter(a=>sameDay(a.start,now)).sort(byTime("start"));
+  const due=vehicles.filter(v=>v.promised&&sameDay(v.promised,now)).sort(byTime("promised"));
+  const carried=vehicles.filter(v=>v.promised&&Date.parse(v.promised)<t0&&v.stage!==READY).sort(byTime("promised"));
+  const ready=due.filter(v=>v.stage===READY).length;
+  main.innerHTML=`<div class="lanes">
+    ${lane("Arriving today",arriving.length+" booked",arriving.map(apptItem).join(""))}
+    ${lane("Due out today",`${ready} of ${due.length} ready`,due.map(v=>dueItem(v,false)).join(""),"today")}
+    ${lane("Past due date",carried.length+" open",carried.map(v=>dueItem(v,true)).join(""))}</div>`}
+function renderFloor(main){
+  const order=(a,b)=>Date.parse(a.stageSince)-Date.parse(b.stageSince);
+  if(!vehicles.length){main.innerHTML=`<div class="state"><h2>No vehicles in the shop</h2>Open ShopMonkey work orders show here once the sync is connected.</div>`;return}
+  if(view==="stage"){
+    main.innerHTML=`<div class="lanes">${STAGES.map(s=>{const list=vehicles.filter(v=>v.stage===s).sort(order);
+      return `<section class="lane stagelane ${stCls(s)}"><div class="lane-h"><h2>${s}</h2><span class="n">${list.length}</span></div>
+      <div class="stack">${list.length?list.map(v=>card(v,false)).join(""):`<div class="empty">None</div>`}</div></section>`}).join("")}</div>`;
+  }else{
+    const other=vehicles.filter(v=>!SPOTS.includes(v.spot));
+    const groups=SPOTS.map(s=>[s,vehicles.filter(v=>v.spot===s).sort(order)]);
+    if(other.length)groups.push(["No spot",other]);
+    main.innerHTML=`<div class="spots">${groups.map(([s,list])=>`<section class="lane spot ${s.startsWith("Bay")?"bay":""} ${list.length?"":"open"}">
+      <div class="lane-h"><h2>${s}</h2><span class="n">${list.length?list.length:"Open"}</span></div>
+      <div class="stack">${list.map(v=>card(v,true)).join("")}</div></section>`).join("")}</div>`}}
+
+function render(){
+  const main=$("main");
+  $("notice").hidden=!(vehicles.some(v=>v.sample)||appts.some(a=>a.sample));
+  $("finder").hidden=view!=="schedule";
+  if(cfg===null)return;
+  const S=buildSchedule(),t0=dayStart(new Date()).getTime();
+  const openOn=i=>S.techs.reduce((s,t)=>s+Math.max(0,t.cap[i]-t.used[i]),0);
+  const todayOpen=S.days.length&&S.days[0].getTime()===t0?openOn(0):null;
+  let week=0;for(let i=0;i<5&&i<S.days.length;i++)week+=openOn(i);
+  const late=vehicles.filter(v=>v.promised&&Date.parse(v.promised)<Date.now()&&v.stage!==READY).length;
+  $("tally").innerHTML=`<div><b>${todayOpen==null?"Closed":fmtH(todayOpen)}</b><span>Open h today</span></div>
+    <div><b>${fmtH(week)}</b><span>Open h next 5 days</span></div>
+    <div class="${S.unassigned.length?"alert":""}"><b>${S.unassigned.length}</b><span>Unassigned</span></div>
+    <div><b>${vehicles.length}</b><span>Cars on site</span></div>
+    <div class="${late?"alert":""}"><b>${late}</b><span>Past due</span></div>
+    ${syncInfo&&syncInfo.lastRun?`<div class="${hoursSince(syncInfo.lastRun)>3?"alert":""}"><b>${esc(fmtTime(syncInfo.lastRun))}</b><span>ShopMonkey sync${sameDay(syncInfo.lastRun,new Date())?"":" "+esc(wd(syncInfo.lastRun))}</span></div>`:""}`;
+  if(view==="schedule")return renderSchedule(main,S);
+  if(view==="today")return renderToday(main);
+  renderFloor(main)}
+
+/* ---------- vehicle edit ---------- */
+function picks(el,opts,key){el.innerHTML=opts.map(o=>`<button type="button" aria-pressed="${draft[key]===o}" data-v="${esc(o)}">${esc(o)}</button>`).join("");
+  el.onclick=e=>{const b=e.target.closest("button");if(!b)return;draft[key]=b.dataset.v;picks(el,opts,key)}}
+function openEdit(id){
+  const v=vehicles.find(x=>x.id===id);if(!v)return;editing=v;draft={spot:v.spot};
+  $("d-ro").textContent="RO "+v.ro;$("d-veh").textContent=`${v.year} ${v.make} ${v.model}`;
+  $("d-meta").textContent=[v.color,v.customer,techLine(v)||"No tech in ShopMonkey"].filter(Boolean).join(" · ");
+  $("d-stage").innerHTML=stagePill(v.stage);picks($("d-spot"),SPOTS,"spot");
+  $("d-hours").textContent=v.source==="shopmonkey"?`ShopMonkey: ${fmtH(num(v.smHoursLeft))} h left, ${fmtH(num(v.smAuthHoursLeft))} h authorized`:"";
+  $("d-left").value=hasNum(v.hoursLeft)?v.hoursLeft:"";$("d-note").value=v.note||"";$("d-err").hidden=true;
+  $("d-save").disabled=!canWrite;
+  if(!canWrite){$("d-err").textContent="You can view this board but not change it. Ask the owner for edit access.";$("d-err").hidden=false}
+  $("dlg").showModal()}
+async function saveEdit(){
+  if(!db||!editing)return;
+  const raw=$("d-left").value.trim();
+  const patch={spot:draft.spot||"",note:$("d-note").value.trim(),hoursLeft:raw===""?null:Math.max(0,num(raw))};
+  $("d-save").disabled=true;
+  try{await db.doc("vehicles/"+editing.id).update(patch);$("dlg").close()}
+  catch(e){showErr("d-err",e)}finally{$("d-save").disabled=!canWrite}}
+function showErr(id,e){$(id).textContent=e&&e.code==="invalid_argument"?"This board is view-only for you. Ask the owner for edit access.":"Couldn't save. Check the connection and try again.";
+  $(id).hidden=false;if(e&&e.code==="invalid_argument")canWrite=false}
+
+/* ---------- reorder, assign, remove ---------- */
+async function moveJob(key,dir){const S=buildSchedule();let q=null,i=-1;
+  for(const n in S.queues){const k=S.queues[n].findIndex(j=>j.key===key);if(k>=0){q=S.queues[n];i=k;break}}
+  if(!q)return;const k=dir==="up"?i-1:i+1;if(k<0||k>=q.length)return;
+  const b=q[k],kb=S.key(b),nb=dir==="up"?q[k-1]:q[k+1];
+  const nk=nb?(kb+S.key(nb))/2:kb+(dir==="up"?-60000:60000);
+  const j=q[i],cur=j.src.schedOrder,map=cur&&typeof cur==="object"?{...cur}:{};
+  map[j.tech||"_"]=nk;
+  try{await db.doc(j.path).update({schedOrder:map})}catch(e){}}
+async function assignAppt(id,tech){if(!tech)return;try{await db.doc("appointments/"+id).update({tech})}catch(e){}}
+async function removeAppt(id){if(rmArmed!==id){rmArmed=id;render();setTimeout(()=>{if(rmArmed===id){rmArmed=null;render()}},4000);return}
+  rmArmed=null;try{await db.doc("appointments/"+id).delete()}catch(e){}}
+
+/* ---------- pencil in ---------- */
+function fillTechs(pick){const prev=pick!==undefined?pick:$("p-tech").value;
+  $("p-tech").innerHTML=`<option value="">Unassigned</option>`+techList().map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
+  if([...$("p-tech").options].some(o=>o.value===prev))$("p-tech").value=prev}
+function preview(){const S=buildSchedule(),tech=$("p-tech").value,h=num($("p-hours").value),v=$("p-date").value,el=$("p-prev");
+  if(!v||h<=0){el.textContent="";return}
+  if(!tech){el.className="preview none";el.textContent="Goes in the Unassigned bucket until a tech is picked.";return}
+  const d=fromYmd(v),rel=Math.max(0,S.days.findIndex(x=>x.getTime()>=d.getTime())),p=project(S,tech,rel,h);
+  if(!p||p.end==null){el.className="preview none";el.textContent=`${tech} can't finish this in the next ${HORIZON} workdays.`;return}
+  el.className="preview";el.textContent=`${tech} starts ${fmtDay(S.days[p.start])} and finishes ${p.end===p.start?"the same day":fmtDay(S.days[p.end])}.`}
+function openPencil(date,tech){
+  const days=workDays(30);
+  $("p-date").innerHTML=days.map(d=>`<option value="${ymd(d)}">${esc(fmtDay(d))}</option>`).join("");
+  if(date)$("p-date").value=date;
+  fillTechs(tech||"");
+  $("p-hours").value=needHours()||"";$("p-err").hidden=true;$("p-save").disabled=!canWrite;
+  if(!canWrite){$("p-err").textContent="You can view this board but not change it. Ask the owner for edit access.";$("p-err").hidden=false}
+  preview();$("pdlg").showModal();$("p-cust").focus()}
+async function savePencil(){
+  const date=$("p-date").value,time=$("p-time").value||"08:00",h=num($("p-hours").value);
+  const cust=$("p-cust").value.trim(),veh=$("p-veh").value.trim();
+  if(!date||!h||(!cust&&!veh)){$("p-err").textContent="Add a customer or vehicle, a drop-off day, and the labor hours.";$("p-err").hidden=false;return}
+  const start=new Date(`${date}T${time}`);
+  $("p-save").disabled=true;
+  try{await db.collection("appointments").add({tentative:true,start:start.toISOString(),tech:$("p-tech").value,customer:cust,vehicle:veh,service:$("p-svc").value.trim(),hours:h,createdAt:new Date().toISOString()});
+    ["p-cust","p-veh","p-svc"].forEach(i=>$(i).value="");$("pdlg").close()}
+  catch(e){showErr("p-err",e)}finally{$("p-save").disabled=!canWrite}}
+
+/* ---------- shop & tech hours ---------- */
+function draftShop(){return {open:$("s-open").value||"08:00",close:$("s-close").value||"17:00",lunchStart:$("s-lunch").value||"12:00",lunchHours:Math.max(0,num($("s-lunchh").value))}}
+function techRows(){$("s-rows").innerHTML=techDraft.length?`<table><thead><tr><th>Tech</th>${WORK.map(d=>`<th>${DOW_NAMES[d]}</th>`).join("")}<th></th></tr></thead><tbody>
+  ${techDraft.map((t,i)=>`<tr><td class="nm"><input id="s-name-${i}" aria-label="Tech name" value="${esc(t.name)}" placeholder="Name"></td>
+  ${WORK.map(d=>`<td class="h"><input id="s-h-${i}-${d}" aria-label="${esc(t.name||"Tech")} ${DOW_NAMES[d]} hours" type="number" min="0" step="0.5" value="${esc(t.hours[d])}"></td>`).join("")}
+  <td><button class="link" type="button" data-del="${i}">Remove</button></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No techs yet.</div>`;sumCap()}
+function readRows(){const L=lenOf(draftShop());
+  techDraft=techDraft.map((t,i)=>({name:$("s-name-"+i).value.trim(),hours:Object.fromEntries(WORK.map(d=>[d,Math.min(L,Math.max(0,num($(`s-h-${i}-${d}`).value)))]))}))}
+function sumCap(){const s=draftShop(),L=lenOf(s);
+  $("s-len").textContent=`Work hours per day: ${fmtH(L)} h (${fmtH((tmin(s.close)-tmin(s.open))/60)} h open minus ${fmtH(s.lunchHours)} h lunch). Labor limits above ${fmtH(L)} h are cut to ${fmtH(L)} h.`;
+  const per=WORK.map(d=>techDraft.reduce((a,t)=>a+Math.min(L,num(t.hours[d])),0));
+  $("s-sum").textContent=techDraft.length?"Shop total: "+WORK.map((d,i)=>`${DOW_NAMES[d]} ${fmtH(per[i])} h`).join(" · "):""}
+function openCap(){const s=shop();$("s-open").value=s.open;$("s-close").value=s.close;$("s-lunch").value=s.lunchStart;$("s-lunchh").value=s.lunchHours;
+  techDraft=techList().map(t=>({name:t.name,hours:Object.fromEntries(WORK.map(d=>[d,techLimit(t,d)]))}));
+  techRows();$("s-err").hidden=true;$("s-save").disabled=!canWrite;$("sdlg").showModal()}
+["s-open","s-close","s-lunch","s-lunchh"].forEach(i=>$(i).addEventListener("input",()=>{if(techDraft.length)readRows();sumCap()}));
+$("s-rows").addEventListener("input",()=>{readRows();sumCap()});
+$("s-rows").addEventListener("click",e=>{const b=e.target.closest("[data-del]");if(!b)return;readRows();techDraft.splice(+b.dataset.del,1);techRows()});
+$("s-add").onclick=()=>{if(techDraft.length)readRows();const L=lenOf(draftShop());techDraft.push({name:"",hours:Object.fromEntries(WORK.map(d=>[d,L]))});techRows()};
+$("s-cancel").onclick=()=>$("sdlg").close();
+$("s-save").onclick=async()=>{if(techDraft.length)readRows();
+  const s=draftShop();if(lenOf(s)<=0){$("s-err").textContent="Closing time has to be after opening time plus lunch.";$("s-err").hidden=false;return}
+  $("s-save").disabled=true;
+  try{await db.doc("config/shop").set({...s,techs:techDraft.filter(t=>t.name)});$("sdlg").close()}
+  catch(e){showErr("s-err",e)}finally{$("s-save").disabled=!canWrite}};
+
+/* ---------- wiring ---------- */
+function markView(){document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.view===view))}
+function setView(v){view=v;markView();store.set("pb-view",v);render()}
+function setTV(on){document.body.classList.toggle("tv",on);$("tv-btn").setAttribute("aria-pressed",on);store.set("pb-tv",on?"1":"");
+  if(on&&navigator.wakeLock)navigator.wakeLock.request("screen").catch(()=>{});
+  if(on&&document.documentElement.requestFullscreen&&!document.fullscreenElement)document.documentElement.requestFullscreen().catch(()=>{})}
+document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$("tv-btn").onclick=()=>setTV(!document.body.classList.contains("tv"));
+$("cap-btn").onclick=openCap;
+$("pencil-btn").onclick=()=>openPencil();
+$("f-hours").addEventListener("input",render);
+$("quick").onclick=e=>{const b=e.target.closest("[data-h]");if(b){$("f-hours").value=b.dataset.h;render()}};
+$("fits").onclick=e=>{const b=e.target.closest("[data-date]");if(b)openPencil(b.dataset.date,b.dataset.tech)};
+["p-date","p-tech","p-hours"].forEach(i=>$(i).addEventListener("input",preview));
+$("main").addEventListener("click",e=>{if(e.target.closest("[data-cap]")){openCap();return}
+  const m=e.target.closest("[data-mv]");if(m){if(!m.disabled)moveJob(m.dataset.key,m.dataset.mv);return}
+  const r=e.target.closest("[data-rm]");if(r){removeAppt(r.dataset.rm);return}
+  if(e.target.closest("select"))return;
+  const c=e.target.closest(".card,.card-due");if(c)openEdit(c.dataset.id)});
+$("main").addEventListener("change",e=>{const s=e.target.closest("[data-assign]");if(s)assignAppt(s.dataset.assign,s.value)});
+$("d-cancel").onclick=()=>$("dlg").close();$("d-save").onclick=saveEdit;
+$("p-cancel").onclick=()=>$("pdlg").close();$("p-save").onclick=savePencil;
+const anyOpen=()=>["dlg","pdlg","sdlg"].some(i=>$(i).open);
+function tick(){const n=new Date();$("clock").innerHTML=`<span class="d">${esc(n.toLocaleDateString([], {weekday:"short",month:"short",day:"numeric"}))}</span>${esc(n.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}))}`}
+tick();setInterval(()=>{tick();if(!anyOpen()&&!(document.activeElement&&document.activeElement.matches("main select")))render()},60000);
+
+{const h=location.hash.slice(1),s=store.get("pb-view");view=VIEWS.includes(h)?h:VIEWS.includes(s)?s:"schedule";markView()}
+if(location.hash==="#tv"||store.get("pb-tv"))document.body.classList.add("tv"),$("tv-btn").setAttribute("aria-pressed","true");
+render();
+
+(async()=>{
+  db=window.claude?await window.claude.use("db"):null;
+  if(!db){$("main").innerHTML=`<div class="state"><h2>Board offline</h2>Sign in to claude.ai to see the shop's schedule.</div>`;return}
+  try{const user=await window.claude.use("user");const w=user?await user.can("data.write"):null;if(w===false)canWrite=false}catch(e){}
+  const lost=()=>{$("main").innerHTML=`<div class="state"><h2>Lost connection</h2>Reload the page to reconnect the board.</div>`};
+  const redraw=()=>{if(!anyOpen())render()};
+  db.doc("config/shop").onSnapshot(s=>{cfg=s.exists?s.data():{techs:[]};redraw()},lost);
+  db.doc("config/sync").onSnapshot(s=>{syncInfo=s.exists?s.data():null;redraw()},()=>{});
+  db.collection("vehicles").onSnapshot(snap=>{vehicles=snap.docs.map(d=>({id:d.id,...d.data()}));redraw()},lost);
+  db.collection("appointments").onSnapshot(snap=>{appts=snap.docs.map(d=>({id:d.id,...d.data()}));redraw()},lost);
+})();
+</script>
+
+</body></html>
