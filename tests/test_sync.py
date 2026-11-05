@@ -44,7 +44,7 @@ def snapshot(**over):
         "orders": [
             order("o-101", "w4", assignedTechnicianIds=["u1", "u2"]),
             order("o-102", "w6"),  # AR DUE: off the lot
-            order("o-103", "w1"),  # Scheduled: upcoming only
+            order("o-103", "w1", assignedTechnicianIds=["u1"]),  # Scheduled: upcoming only
         ],
         "services": {
             "o-101": [
@@ -79,6 +79,13 @@ class LaborTests(unittest.TestCase):
         self.assertEqual(lab["smAuthHoursLeft"], 3.5)
         self.assertEqual(lab["techHours"], {"Ann B.": {"left": 2.0, "auth": 2.0}, "Cal D.": {"left": 4.5, "auth": 1.5}})
         self.assertEqual(lab["unassignedHours"], 0.5)
+
+    def test_line_without_tech_goes_to_sole_order_tech(self):
+        lines = [svc("NotAuthorized", (2, None, False), (1, "u3", False))]
+        lab = labor_summary(lines, {"u1": "Ann B."}, "Ann B.")
+        self.assertEqual(lab["techHours"], {"Ann B.": {"left": 2.0, "auth": 0.0}})
+        self.assertEqual(lab["unassignedHours"], 1.0)  # a named non-tech stays unassigned
+        self.assertEqual(labor_summary(lines, {"u1": "Ann B."})["unassignedHours"], 3.0)
 
 
 class DesiredTests(unittest.TestCase):

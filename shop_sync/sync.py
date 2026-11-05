@@ -45,11 +45,13 @@ def local_day(ts, tz: ZoneInfo):
 
 # ---------------------------------------------------------------- labor
 
-def labor_summary(services: list[dict], tech_for: dict[str, str]) -> dict:
+def labor_summary(services: list[dict], tech_for: dict[str, str], fallback: str = "") -> dict:
     """Hours not yet done, split per board tech and authorized / not.
 
     Deferred or recommended services are skipped: that work isn't happening on
-    this visit. Labor for anyone not on the board's tech list is unassigned.
+    this visit. A line with no tech goes to `fallback` (the order's only
+    assigned tech, if it has exactly one). Labor for anyone not on the board's
+    tech list is unassigned.
     """
     techs: dict[str, dict] = {}
     left = auth = un = un_auth = 0.0
@@ -65,7 +67,8 @@ def labor_summary(services: list[dict], tech_for: dict[str, str]) -> dict:
                 continue
             left += h
             auth += h if is_auth else 0
-            name = tech_for.get(line.get("technicianId") or "")
+            tid = line.get("technicianId")
+            name = tech_for.get(tid) if tid else fallback
             if name:
                 t = techs.setdefault(name, {"left": 0.0, "auth": 0.0})
                 t["left"] += h
@@ -84,6 +87,12 @@ def labor_summary(services: list[dict], tech_for: dict[str, str]) -> dict:
 
 def order_techs(order: dict, tech_for: dict[str, str]) -> list[str]:
     return [tech_for[i] for i in order.get("assignedTechnicianIds") or [] if i in tech_for]
+
+
+def sole_tech(order: dict | None, tech_for: dict[str, str]) -> str:
+    """The order's tech when exactly one person is assigned and they're on the board."""
+    ids = (order or {}).get("assignedTechnicianIds") or []
+    return tech_for.get(ids[0], "") if len(ids) == 1 else ""
 
 
 def primary_tech(summary: dict, order_tech_names: list[str]) -> str:
@@ -131,7 +140,7 @@ def desired_state(sm: dict, cfg: dict) -> dict:
         stage = status_name.get(o.get("workflowStatusId"))
         if stage not in in_shop or o.get("archived") or o.get("deleted"):
             continue
-        lab = labor_summary(sm["services"].get(o["id"], []), tech_for)
+        lab = labor_summary(sm["services"].get(o["id"], []), tech_for, sole_tech(o, tech_for))
         names = order_techs(o, tech_for)
         out_v[f"sm-o-{o['id']}"] = {
             "source": SOURCE,
@@ -163,7 +172,7 @@ def desired_state(sm: dict, cfg: dict) -> dict:
                 continue  # already in the shop (counted as a vehicle) or past it
         if a.get("cancellationNote"):
             continue
-        lab = labor_summary(sm["services"].get(a.get("orderId") or "", []), tech_for) if o else labor_summary([], {})
+        lab = labor_summary(sm["services"].get(a.get("orderId") or "", []), tech_for, sole_tech(o, tech_for)) if o else labor_summary([], {})
         names = order_techs(o, tech_for) if o else []
         v = a.get("vehicle") or {}
         vf = vehicle_fields(v)
