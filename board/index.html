@@ -107,8 +107,11 @@ main{flex:1;min-height:0;overflow:auto;padding-block:14px}
 .hgrid td.on input{width:1.2em;height:1.2em;accent-color:var(--accent)}
 .hgrid tr.off td.nm input,.hgrid tr.off td.h input{opacity:.5}
 
+.sortbar{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.stack .grp{border-top:1px solid var(--line);padding-top:6px}
+.stack .grp:first-child{border-top:0;padding-top:0}
 .spots{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(220px*var(--scale)),1fr));gap:12px}
-.spot.bay .lane-h h2::before{content:"";display:inline-block;width:.5em;height:.5em;background:var(--accent);margin-right:.4em;vertical-align:.12em}
+.spot.bldg .lane-h h2::before{content:"";display:inline-block;width:.5em;height:.5em;background:var(--accent);margin-right:.4em;vertical-align:.12em}
 .spot.open{border-style:dashed}
 .spot.open .lane-h h2{color:var(--muted)}
 
@@ -285,14 +288,14 @@ body.tv .mv{display:none}
 /* Stages are ShopMonkey's workflow statuses for cars on the lot; the sync keeps them current. */
 const STAGES=["Diagnosis","Service Advisor Review","Parts Hold","In Progress","Kniesels In Process","Completed / File Review","Ready For Pickup"];
 const READY="Ready For Pickup";
-const SPOTS=["Bay 1","Bay 2","Bay 3","Bay 4","Bay 5","Bay 6","Front lot","Back lot"];
+const SPOTS=["Building 1","Building 2","Off Lot (sublet)","Kniesels Backlot"];
 const HOLD=["Service Advisor Review","Parts Hold"];
 const LIMITS={"Diagnosis":[3,6],"Service Advisor Review":[2,24],"Parts Hold":[24,72],"In Progress":[8,24],"Kniesels In Process":[24,72],"Completed / File Review":[2,8],"Ready For Pickup":[24,72]};
 const VIEWS=["schedule","today","stage","spot"];
 const WORK=[1,2,3,4,5],DOW_NAMES={1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri"};
 const DAYS_SHOWN=10,HORIZON=60,EPS=1e-6;
 
-let vehicles=[], appts=[], cfg=null, syncInfo=null, view="schedule", db=null, canWrite=true, editing=null, draft={}, techDraft=[], rmArmed=null;
+let vehicles=[], appts=[], cfg=null, syncInfo=null, view="schedule", stageSort="age", db=null, canWrite=true, editing=null, draft={}, techDraft=[], rmArmed=null;
 const $=id=>document.getElementById(id);
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 
@@ -477,18 +480,29 @@ function renderToday(main){
     ${lane("Arriving today",arriving.length+" booked",arriving.map(apptItem).join(""))}
     ${lane("Due out today",`${ready} of ${due.length} ready`,due.map(v=>dueItem(v,false)).join(""),"today")}
     ${lane("Past due date",carried.length+" open",carried.map(v=>dueItem(v,true)).join(""))}</div>`}
+/* Tech a car is grouped under: the one with the most hours left (same as v.tech), else the first on the order. */
+function carTech(v){return v.tech||(v.orderTechs||[])[0]||""}
+function techRank(name){if(!name)return 1e6;const i=techList().findIndex(t=>t.name===name);return i<0?1e5:i}
 function renderFloor(main){
   const order=(a,b)=>Date.parse(a.stageSince)-Date.parse(b.stageSince);
   if(!vehicles.length){main.innerHTML=`<div class="state"><h2>No vehicles in the shop</h2>Open ShopMonkey work orders show here once the sync is connected.</div>`;return}
   if(view==="stage"){
-    main.innerHTML=`<div class="lanes">${STAGES.map(s=>{const list=vehicles.filter(v=>v.stage===s).sort(order);
+    const bar=`<div class="sortbar"><span class="meta">Sort</span><div class="seg" role="group" aria-label="Sort cars">
+      <button type="button" data-sort="age" aria-pressed="${stageSort==="age"}">Time in stage</button>
+      <button type="button" data-sort="tech" aria-pressed="${stageSort==="tech"}">Tech</button></div></div>`;
+    const body=list=>{if(!list.length)return `<div class="empty">None</div>`;
+      if(stageSort!=="tech")return list.map(v=>card(v,false)).join("");
+      const groups=new Map();list.forEach(v=>{const t=carTech(v);if(!groups.has(t))groups.set(t,[]);groups.get(t).push(v)});
+      return [...groups.keys()].sort((a,b)=>techRank(a)-techRank(b)||a.localeCompare(b)).map(t=>{const g=groups.get(t);
+        return `<div class="grp">${esc(t||"No tech")} · ${g.length}</div>${g.map(v=>card(v,false)).join("")}`}).join("")};
+    main.innerHTML=`${bar}<div class="lanes">${STAGES.map(s=>{const list=vehicles.filter(v=>v.stage===s).sort(order);
       return `<section class="lane stagelane ${stCls(s)}"><div class="lane-h"><h2>${s}</h2><span class="n">${list.length}</span></div>
-      <div class="stack">${list.length?list.map(v=>card(v,false)).join(""):`<div class="empty">None</div>`}</div></section>`}).join("")}</div>`;
+      <div class="stack">${body(list)}</div></section>`}).join("")}</div>`;
   }else{
     const other=vehicles.filter(v=>!SPOTS.includes(v.spot));
     const groups=SPOTS.map(s=>[s,vehicles.filter(v=>v.spot===s).sort(order)]);
     if(other.length)groups.push(["No spot",other]);
-    main.innerHTML=`<div class="spots">${groups.map(([s,list])=>`<section class="lane spot ${s.startsWith("Bay")?"bay":""} ${list.length?"":"open"}">
+    main.innerHTML=`<div class="spots">${groups.map(([s,list])=>`<section class="lane spot ${s.startsWith("Building")?"bldg":""} ${list.length?"":"open"}">
       <div class="lane-h"><h2>${s}</h2><span class="n">${list.length?list.length:"Open"}</span></div>
       <div class="stack">${list.map(v=>card(v,true)).join("")}</div></section>`).join("")}</div>`}}
 
@@ -619,6 +633,7 @@ $("quick").onclick=e=>{const b=e.target.closest("[data-h]");if(b){$("f-hours").v
 $("fits").onclick=e=>{const b=e.target.closest("[data-date]");if(b)openPencil(b.dataset.date,b.dataset.tech)};
 ["p-date","p-tech","p-hours"].forEach(i=>$(i).addEventListener("input",preview));
 $("main").addEventListener("click",e=>{if(e.target.closest("[data-cap]")){openCap();return}
+  const so=e.target.closest("[data-sort]");if(so){stageSort=so.dataset.sort;store.set("pb-stage-sort",stageSort);render();return}
   const m=e.target.closest("[data-mv]");if(m){if(!m.disabled)moveJob(m.dataset.key,m.dataset.mv);return}
   const r=e.target.closest("[data-rm]");if(r){removeAppt(r.dataset.rm);return}
   if(e.target.closest("select"))return;
@@ -630,6 +645,7 @@ const anyOpen=()=>["dlg","pdlg","sdlg"].some(i=>$(i).open);
 function tick(){const n=new Date();$("clock").innerHTML=`<span class="d">${esc(n.toLocaleDateString([], {weekday:"short",month:"short",day:"numeric"}))}</span>${esc(n.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}))}`}
 tick();setInterval(()=>{tick();if(!anyOpen()&&!(document.activeElement&&document.activeElement.matches("main select")))render()},60000);
 
+stageSort=store.get("pb-stage-sort")==="tech"?"tech":"age";
 {const h=location.hash.slice(1),s=store.get("pb-view");view=VIEWS.includes(h)?h:VIEWS.includes(s)?s:"schedule";markView()}
 if(location.hash==="#tv"||store.get("pb-tv"))document.body.classList.add("tv"),$("tv-btn").setAttribute("aria-pressed","true");
 render();
