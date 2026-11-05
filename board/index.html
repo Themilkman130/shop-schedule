@@ -103,6 +103,9 @@ main{flex:1;min-height:0;overflow:auto;padding-block:14px}
 .hgrid input{width:100%;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-variant-numeric:tabular-nums}
 .hgrid td.nm{min-width:7em}
 .hgrid td.h input{width:3.6em;text-align:center}
+.hgrid td.on{width:2.2em;text-align:center}
+.hgrid td.on input{width:1.2em;height:1.2em;accent-color:var(--accent)}
+.hgrid tr.off td.nm input,.hgrid tr.off td.h input{opacity:.5}
 
 .spots{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(220px*var(--scale)),1fr));gap:12px}
 .spot.bay .lane-h h2::before{content:"";display:inline-block;width:.5em;height:.5em;background:var(--accent);margin-right:.4em;vertical-align:.12em}
@@ -258,7 +261,7 @@ body.tv .mv{display:none}
 
 <dialog id="sdlg">
   <form method="dialog">
-    <div class="dlg-h"><h2>Shop &amp; tech hours</h2><div class="meta">Open Monday to Friday. Each tech's daily labor limit can't exceed the shop's work hours.</div></div>
+    <div class="dlg-h"><h2>Shop &amp; tech hours</h2><div class="meta">Open Monday to Friday. Each tech's daily labor limit can't exceed the shop's work hours. Untick "On" to take someone off the schedule; their work then shows in Unassigned.</div></div>
     <div class="dlg-b">
       <div class="two">
         <label for="s-open">Opens<input id="s-open" type="time" value="08:00"></label>
@@ -342,6 +345,9 @@ function remainingToday(){const s=shop(),n=new Date(),now=n.getHours()*60+n.getM
   const from=Math.max(now,o);if(from>=c)return 0;const ls=tmin(s.lunchStart),le=ls+s.lunchHours*60;
   const ov=Math.max(0,Math.min(c,le)-Math.max(from,ls));return Math.max(0,(c-from-ov)/60)}
 function techList(){return cfg&&Array.isArray(cfg.techs)?cfg.techs.filter(t=>t&&t.name):[]}
+/* A tech switched off in "Shop & tech hours" keeps their settings but gets no schedule column. */
+const isOn=t=>t&&t.active!==false;
+function activeTechs(){return techList().filter(isOn)}
 function techLimit(t,dow){if(!WORK.includes(dow))return 0;
   const h=t.hours&&t.hours[dow]!=null?num(t.hours[dow]):t.weekday!=null?num(t.weekday):dayLen();
   return Math.min(Math.max(0,h),dayLen())}
@@ -354,7 +360,7 @@ function matchTech(name){if(!name)return null;const n=String(name).trim().toLowe
 function buildSchedule(){
   const days=workDays(HORIZON),t0=dayStart(new Date()).getTime();
   const idxFor=d=>{const t=dayStart(d).getTime();if(t<=t0)return 0;const i=days.findIndex(x=>x.getTime()>=t);return i<0?days.length:i};
-  const techs=techList().map(t=>({name:t.name,cap:days.map((d,i)=>{let c=techLimit(t,d.getDay());if(i===0&&d.getTime()===t0)c=Math.min(c,remainingToday());return c}),used:days.map(()=>0)}));
+  const techs=activeTechs().map(t=>({name:t.name,cap:days.map((d,i)=>{let c=techLimit(t,d.getDay());if(i===0&&d.getTime()===t0)c=Math.min(c,remainingToday());return c}),used:days.map(()=>0)}));
   const jobs=[],unassigned=[],hold=[];
   vehicles.forEach(v=>{const sh=shares(v,"veh");if(sh.total<=0)return;
     const base={path:"vehicles/"+v.id,kind:"veh",src:v,release:0,tentative:false,
@@ -367,7 +373,9 @@ function buildSchedule(){
     if(!sh.parts.length){jobs.push({...base,key:"a:"+a.id+":",tech:a.tech||"",hours:0,auth:0,order:orderFor(a,a.tech)});return}
     sh.parts.forEach(p=>jobs.push({...base,key:"a:"+a.id+":"+p.tech,tech:p.tech,hours:p.h,auth:p.a,order:orderFor(a,p.tech)}))});
   const queues={};techs.forEach(t=>queues[t.name]=[]);
-  jobs.forEach(j=>{const t=matchTech(j.tech);if(!t||j.hours<=0){unassigned.push(j);return}j.techName=t.name;queues[t.name].push(j)});
+  jobs.forEach(j=>{const t=matchTech(j.tech);
+    if(t&&!isOn(t))j.offTech=t.name;
+    if(!t||!isOn(t)||j.hours<=0){unassigned.push(j);return}j.techName=t.name;queues[t.name].push(j)});
   const key=j=>j.order!=null&&isFinite(j.order)?Number(j.order):j.def;
   techs.forEach(T=>{const q=queues[T.name].sort((a,b)=>key(a)-key(b));
     q.forEach(j=>{let rem=j.hours;j.parts=[];for(let i=j.release;i<days.length&&rem>EPS;i++){const free=T.cap[i]-T.used[i];if(free<=EPS)continue;
@@ -414,18 +422,19 @@ function segItem(S,j,p,q,qi){const n=j.parts.length,k=j.parts.indexOf(p)+1;
     <div class="mv"><button type="button" title="Move earlier in ${esc(j.techName)}'s line" aria-label="Move earlier" data-mv="up" data-key="${esc(j.key)}" ${qi===0||!canWrite?"disabled":""}>&#9650;</button>
     <button type="button" title="Move later in ${esc(j.techName)}'s line" aria-label="Move later" data-mv="down" data-key="${esc(j.key)}" ${qi===q.length-1||!canWrite?"disabled":""}>&#9660;</button></div></div>`}
 function bucketItem(j){const drop=j.kind==="veh"?"In shop now":"Drops off "+fmtDay(j.src.start);
-  const opts=techList().map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
+  const opts=activeTechs().map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
   return `<div class="seg-item ${j.kind}${j.tentative?" tent":""}"><span class="h">${j.hours>0?fmtH(j.hours)+" h":"?"}</span><div class="body">
     <div class="veh">${esc(j.label||"Job")}</div><div class="meta">${esc(j.sub)}</div>${j.auth>EPS?`<div class="meta">${fmtH(j.auth)} h authorized</div>`:""}<div class="meta">${esc(drop)}${j.tech&&!matchTech(j.tech)?` · tech "${esc(j.tech)}" not on the hours list`:""}</div>
+    ${j.offTech?`<span class="warnline">Assigned to ${esc(j.offTech)} (off)</span>`:""}
     ${j.hours<=0?`<span class="warnline">Needs labor hours</span>`:""}
     ${j.tentative?`<div class="assign"><select data-assign="${esc(j.src.id)}" aria-label="Assign tech"><option value="">Assign to…</option>${opts}</select>
       <button type="button" class="link" data-rm="${esc(j.src.id)}">${rmArmed===j.src.id?"Tap again to remove":"Remove"}</button></div>`
-      :`<span class="meta">${j.src.source==="shopmonkey"&&j.hours>0?"No tech on these labor lines. Assign one in ShopMonkey":"Assign the tech in ShopMonkey"}</span>`}</div><span></span></div>`}
+      :`<span class="meta">${j.offTech?`Turn ${esc(j.offTech)} on in Shop &amp; tech hours to schedule it, or reassign in ShopMonkey`:j.src.source==="shopmonkey"&&j.hours>0?"No tech on these labor lines. Assign one in ShopMonkey":"Assign the tech in ShopMonkey"}</span>`}</div><span></span></div>`}
 
 /* ---------- views ---------- */
 function needHours(){return Math.max(0,num($("f-hours").value))}
 function renderSchedule(main,S){
-  if(!S.techs.length){main.innerHTML=`<div class="state"><h2>Add your techs</h2>The schedule needs each tech's daily labor limit to plan the days.<button class="btn primary" type="button" data-cap="1">Set shop &amp; tech hours</button></div>`;$("fits").innerHTML="";return}
+  if(!S.techs.length){main.innerHTML=`<div class="state"><h2>${techList().length?"All techs are off":"Add your techs"}</h2>The schedule needs each tech's daily labor limit to plan the days.<button class="btn primary" type="button" data-cap="1">Set shop &amp; tech hours</button></div>`;$("fits").innerHTML="";return}
   const need=needHours();
   if(need>0){const opts=S.techs.map(t=>({t:t.name,p:project(S,t.name,0,need)})).filter(o=>o.p&&o.p.end!=null).sort((a,b)=>a.p.end-b.p.end||a.p.start-b.p.start);
     $("fits").innerHTML=opts.length?`<span class="lbl">Soonest:</span>${opts.slice(0,3).map(o=>`<button type="button" class="fit" data-date="${ymd(S.days[o.p.start])}" data-tech="${esc(o.t)}">${esc(o.t)}
@@ -541,7 +550,7 @@ async function removeAppt(id){if(rmArmed!==id){rmArmed=id;render();setTimeout(()
 
 /* ---------- pencil in ---------- */
 function fillTechs(pick){const prev=pick!==undefined?pick:$("p-tech").value;
-  $("p-tech").innerHTML=`<option value="">Unassigned</option>`+techList().map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
+  $("p-tech").innerHTML=`<option value="">Unassigned</option>`+activeTechs().map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
   if([...$("p-tech").options].some(o=>o.value===prev))$("p-tech").value=prev}
 function preview(){const S=buildSchedule(),tech=$("p-tech").value,h=num($("p-hours").value),v=$("p-date").value,el=$("p-prev");
   if(!v||h<=0){el.textContent="";return}
@@ -569,23 +578,25 @@ async function savePencil(){
 
 /* ---------- shop & tech hours ---------- */
 function draftShop(){return {open:$("s-open").value||"08:00",close:$("s-close").value||"17:00",lunchStart:$("s-lunch").value||"12:00",lunchHours:Math.max(0,num($("s-lunchh").value))}}
-function techRows(){$("s-rows").innerHTML=techDraft.length?`<table><thead><tr><th>Tech</th>${WORK.map(d=>`<th>${DOW_NAMES[d]}</th>`).join("")}<th></th></tr></thead><tbody>
-  ${techDraft.map((t,i)=>`<tr><td class="nm"><input id="s-name-${i}" aria-label="Tech name" value="${esc(t.name)}" placeholder="Name"></td>
+function techRows(){$("s-rows").innerHTML=techDraft.length?`<table><thead><tr><th>On</th><th>Tech</th>${WORK.map(d=>`<th>${DOW_NAMES[d]}</th>`).join("")}<th></th></tr></thead><tbody>
+  ${techDraft.map((t,i)=>`<tr${t.active===false?' class="off"':""}><td class="on"><input id="s-on-${i}" type="checkbox" aria-label="${esc(t.name||"Tech")} is on the schedule" ${t.active===false?"":"checked"}></td><td class="nm"><input id="s-name-${i}" aria-label="Tech name" value="${esc(t.name)}" placeholder="Name"></td>
   ${WORK.map(d=>`<td class="h"><input id="s-h-${i}-${d}" aria-label="${esc(t.name||"Tech")} ${DOW_NAMES[d]} hours" type="number" min="0" step="0.5" value="${esc(t.hours[d])}"></td>`).join("")}
   <td><button class="link" type="button" data-del="${i}">Remove</button></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No techs yet.</div>`;sumCap()}
 function readRows(){const L=lenOf(draftShop());
-  techDraft=techDraft.map((t,i)=>({name:$("s-name-"+i).value.trim(),hours:Object.fromEntries(WORK.map(d=>[d,Math.min(L,Math.max(0,num($(`s-h-${i}-${d}`).value)))]))}))}
+  techDraft=techDraft.map((t,i)=>({name:$("s-name-"+i).value.trim(),active:$("s-on-"+i).checked,hours:Object.fromEntries(WORK.map(d=>[d,Math.min(L,Math.max(0,num($(`s-h-${i}-${d}`).value)))]))}))}
 function sumCap(){const s=draftShop(),L=lenOf(s);
   $("s-len").textContent=`Work hours per day: ${fmtH(L)} h (${fmtH((tmin(s.close)-tmin(s.open))/60)} h open minus ${fmtH(s.lunchHours)} h lunch). Labor limits above ${fmtH(L)} h are cut to ${fmtH(L)} h.`;
-  const per=WORK.map(d=>techDraft.reduce((a,t)=>a+Math.min(L,num(t.hours[d])),0));
-  $("s-sum").textContent=techDraft.length?"Shop total: "+WORK.map((d,i)=>`${DOW_NAMES[d]} ${fmtH(per[i])} h`).join(" · "):""}
+  const on=techDraft.filter(t=>t.active!==false),per=WORK.map(d=>on.reduce((a,t)=>a+Math.min(L,num(t.hours[d])),0));
+  const off=techDraft.length-on.length;
+  $("s-sum").textContent=techDraft.length?"Shop total"+(off?` (${on.length} on, ${off} off)`:"")+": "+WORK.map((d,i)=>`${DOW_NAMES[d]} ${fmtH(per[i])} h`).join(" · "):""}
 function openCap(){const s=shop();$("s-open").value=s.open;$("s-close").value=s.close;$("s-lunch").value=s.lunchStart;$("s-lunchh").value=s.lunchHours;
-  techDraft=techList().map(t=>({name:t.name,hours:Object.fromEntries(WORK.map(d=>[d,techLimit(t,d)]))}));
+  techDraft=techList().map(t=>({name:t.name,active:isOn(t),hours:Object.fromEntries(WORK.map(d=>[d,techLimit(t,d)]))}));
   techRows();$("s-err").hidden=true;$("s-save").disabled=!canWrite;$("sdlg").showModal()}
 ["s-open","s-close","s-lunch","s-lunchh"].forEach(i=>$(i).addEventListener("input",()=>{if(techDraft.length)readRows();sumCap()}));
 $("s-rows").addEventListener("input",()=>{readRows();sumCap()});
+$("s-rows").addEventListener("change",e=>{if(e.target.type==="checkbox"){readRows();techRows()}});
 $("s-rows").addEventListener("click",e=>{const b=e.target.closest("[data-del]");if(!b)return;readRows();techDraft.splice(+b.dataset.del,1);techRows()});
-$("s-add").onclick=()=>{if(techDraft.length)readRows();const L=lenOf(draftShop());techDraft.push({name:"",hours:Object.fromEntries(WORK.map(d=>[d,L]))});techRows()};
+$("s-add").onclick=()=>{if(techDraft.length)readRows();const L=lenOf(draftShop());techDraft.push({name:"",active:true,hours:Object.fromEntries(WORK.map(d=>[d,L]))});techRows()};
 $("s-cancel").onclick=()=>$("sdlg").close();
 $("s-save").onclick=async()=>{if(techDraft.length)readRows();
   const s=draftShop();if(lenOf(s)<=0){$("s-err").textContent="Closing time has to be after opening time plus lunch.";$("s-err").hidden=false;return}
