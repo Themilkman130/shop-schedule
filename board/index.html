@@ -110,6 +110,12 @@ main{flex:1;min-height:0;overflow:auto;padding-block:14px}
 .sortbar{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .stack .grp{border-top:1px solid var(--line);padding-top:6px}
 .stack .grp:first-child{border-top:0;padding-top:0}
+.ghost{position:fixed;z-index:50;pointer-events:none;margin:0;opacity:1;box-shadow:0 10px 28px rgba(0,0,0,.28);transition:none}
+.card.dragging{opacity:.3}
+.spot.drop{box-shadow:0 0 0 3px var(--accent);background:var(--chip)}
+body.is-dragging,body.is-dragging *{cursor:grabbing!important;user-select:none}
+body:not(.tv) .spots .card{cursor:grab}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:60;background:var(--bad);color:#fff;padding:9px 14px;border-radius:6px;font-weight:600;max-width:calc(100% - 32px)}
 .spots{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(220px*var(--scale)),1fr));gap:12px}
 .spot.bldg .lane-h h2::before{content:"";display:inline-block;width:.5em;height:.5em;background:var(--accent);margin-right:.4em;vertical-align:.12em}
 .spot.open{border-style:dashed}
@@ -499,10 +505,11 @@ function renderFloor(main){
       return `<section class="lane stagelane ${stCls(s)}"><div class="lane-h"><h2>${s}</h2><span class="n">${list.length}</span></div>
       <div class="stack">${body(list)}</div></section>`}).join("")}</div>`;
   }else{
-    const other=vehicles.filter(v=>!SPOTS.includes(v.spot));
+    const other=vehicles.filter(v=>!SPOTS.includes(v.spot)).sort(order);
     const groups=SPOTS.map(s=>[s,vehicles.filter(v=>v.spot===s).sort(order)]);
-    if(other.length)groups.push(["No spot",other]);
-    main.innerHTML=`<div class="spots">${groups.map(([s,list])=>`<section class="lane spot ${s.startsWith("Building")?"bldg":""} ${list.length?"":"open"}">
+    groups.push(["No spot",other]);
+    const hint=canDrag()?`<div class="sortbar"><span class="meta">Drag a car onto another spot to move it. Click a car for details.</span></div>`:"";
+    main.innerHTML=`${hint}<div class="spots">${groups.map(([s,list])=>`<section class="lane spot ${s.startsWith("Building")?"bldg":""} ${list.length?"":"open"}" data-spot="${esc(s==="No spot"?"":s)}">
       <div class="lane-h"><h2>${s}</h2><span class="n">${list.length?list.length:"Open"}</span></div>
       <div class="stack">${list.map(v=>card(v,true)).join("")}</div></section>`).join("")}</div>`}}
 
@@ -618,6 +625,41 @@ $("s-save").onclick=async()=>{if(techDraft.length)readRows();
   try{await db.doc("config/shop").set({...s,techs:techDraft.filter(t=>t.name)});$("sdlg").close()}
   catch(e){showErr("s-err",e)}finally{$("s-save").disabled=!canWrite}};
 
+/* ---------- drag cars between spots (By spot view; off in TV mode and for view-only users) ----------
+   Pointer events so mouse, pen and touch all work. Mouse/pen drags start after a few pixels of
+   movement; touch needs a short press first so a swipe still scrolls the page. */
+let drag=null,noClickUntil=0,toastTimer=null;
+function canDrag(){return view==="spot"&&canWrite&&!!db&&!document.body.classList.contains("tv")}
+function toast(msg){let t=$("toast");if(!t){t=document.createElement("div");t.id="toast";t.className="toast";t.setAttribute("role","status");document.body.appendChild(t)}
+  t.textContent=msg;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,4000)}
+function startDrag(){const d=drag,r=d.el.getBoundingClientRect(),g=d.el.cloneNode(true);
+  g.classList.add("ghost");g.removeAttribute("data-id");Object.assign(g.style,{width:r.width+"px",left:r.left+"px",top:r.top+"px"});
+  document.body.appendChild(g);d.ghost=g;d.on=true;d.el.classList.add("dragging");document.body.classList.add("is-dragging")}
+function endDrag(){if(!drag)return;clearTimeout(drag.hold);drag.ghost&&drag.ghost.remove();drag.el.classList.remove("dragging");
+  drag.over&&drag.over.classList.remove("drop");document.body.classList.remove("is-dragging");drag=null}
+$("main").addEventListener("pointerdown",e=>{
+  if(!canDrag()||e.button!==0||drag)return;const c=e.target.closest(".spot .card");if(!c)return;
+  drag={id:c.dataset.id,el:c,x:e.clientX,y:e.clientY,pid:e.pointerId,touch:e.pointerType==="touch",on:false,over:null};
+  if(drag.touch)drag.hold=setTimeout(()=>{if(drag&&!drag.on){startDrag();navigator.vibrate&&navigator.vibrate(15)}},350)});
+window.addEventListener("pointermove",e=>{
+  if(!drag||e.pointerId!==drag.pid)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  if(!drag.on){if(drag.touch){if(Math.hypot(dx,dy)>10)endDrag();return}if(Math.hypot(dx,dy)<6)return;startDrag()}
+  drag.ghost.style.transform=`translate(${dx}px,${dy}px) rotate(1.5deg)`;
+  const under=document.elementFromPoint(e.clientX,e.clientY),lane=under&&under.closest(".spot");
+  if(lane!==drag.over){drag.over&&drag.over.classList.remove("drop");drag.over=lane;lane&&lane.classList.add("drop")}});
+document.addEventListener("touchmove",e=>{if(drag&&drag.on)e.preventDefault()},{passive:false});
+window.addEventListener("pointercancel",e=>{if(drag&&e.pointerId===drag.pid){endDrag();render()}});
+window.addEventListener("pointerup",async e=>{
+  if(!drag||e.pointerId!==drag.pid)return;const d=drag,was=d.on;endDrag();
+  if(!was)return;noClickUntil=Date.now()+400;
+  const v=vehicles.find(x=>x.id===d.id),spot=d.over?d.over.dataset.spot:null;
+  if(!v||spot==null||(SPOTS.includes(v.spot)?v.spot:"")===spot){render();return}
+  const old=v.spot;v.spot=spot;render();
+  try{await db.doc("vehicles/"+v.id).update({spot})}
+  catch(err){v.spot=old;render();toast(err&&err.code==="invalid_argument"?"This board is view-only for you.":"Couldn't move the car. Check the connection and try again.");
+    if(err&&err.code==="invalid_argument")canWrite=false}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&drag){endDrag();render()}});
+
 /* ---------- wiring ---------- */
 function markView(){document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.view===view))}
 function setView(v){view=v;markView();store.set("pb-view",v);render()}
@@ -637,11 +679,12 @@ $("main").addEventListener("click",e=>{if(e.target.closest("[data-cap]")){openCa
   const m=e.target.closest("[data-mv]");if(m){if(!m.disabled)moveJob(m.dataset.key,m.dataset.mv);return}
   const r=e.target.closest("[data-rm]");if(r){removeAppt(r.dataset.rm);return}
   if(e.target.closest("select"))return;
+  if(Date.now()<noClickUntil)return;
   const c=e.target.closest(".card,.card-due");if(c)openEdit(c.dataset.id)});
 $("main").addEventListener("change",e=>{const s=e.target.closest("[data-assign]");if(s)assignAppt(s.dataset.assign,s.value)});
 $("d-cancel").onclick=()=>$("dlg").close();$("d-save").onclick=saveEdit;
 $("p-cancel").onclick=()=>$("pdlg").close();$("p-save").onclick=savePencil;
-const anyOpen=()=>["dlg","pdlg","sdlg"].some(i=>$(i).open);
+const anyOpen=()=>["dlg","pdlg","sdlg"].some(i=>$(i).open)||!!(drag&&drag.on);
 function tick(){const n=new Date();$("clock").innerHTML=`<span class="d">${esc(n.toLocaleDateString([], {weekday:"short",month:"short",day:"numeric"}))}</span>${esc(n.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}))}`}
 tick();setInterval(()=>{tick();if(!anyOpen()&&!(document.activeElement&&document.activeElement.matches("main select")))render()},60000);
 
