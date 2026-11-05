@@ -1,0 +1,18 @@
+{
+  "timezone": "America/Los_Angeles",
+  "in_shop_statuses": [
+    "Diagnosis",
+    "Service Advisor Review",
+    "Parts Hold",
+    "In Progress",
+    "Kniesels In Process",
+    "Completed / File Review",
+    "Ready For Pickup"
+  ],
+  "upcoming_statuses": ["New Work Request", "Scheduled"],
+  "techs": ["Matt O.", "Brad O.", "Colin O.", "Jacob M.", "Tom D.", "Alex W."],
+  "default_tech_hours": 8,
+  "appointment_days_ahead": 90,
+  "request_gap_seconds": 0.7,
+  "max_writes_per_batch": 50
+}
