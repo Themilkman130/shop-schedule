@@ -75,7 +75,8 @@ main{flex:1;min-height:0;overflow:auto;padding-block:14px}
 .lane.today{border-top:4px solid var(--accent)}
 .lane.stagelane{border-top:6px solid var(--stc)}
 
-.days{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(215px*var(--scale)),1fr));gap:10px;align-items:start}
+.days{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:start}
+@media (max-width:1100px){.days{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
 .lane.fits{box-shadow:0 0 0 3px var(--ok)}
 .open-h{font-family:var(--f-display);font-weight:700;font-size:1.35em;font-variant-numeric:tabular-nums;white-space:nowrap}
 .open-h.full{color:var(--bad)} .open-h.tight{color:var(--warn)}
@@ -299,7 +300,9 @@ const HOLD=["Service Advisor Review","Parts Hold"];
 const LIMITS={"Diagnosis":[3,6],"Service Advisor Review":[2,24],"Parts Hold":[24,72],"In Progress":[8,24],"Kniesels In Process":[24,72],"Completed / File Review":[2,8],"Ready For Pickup":[24,72]};
 const VIEWS=["schedule","today","stage","spot"];
 const WORK=[1,2,3,4,5],DOW_NAMES={1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri"};
-const DAYS_SHOWN=10,HORIZON=60,EPS=1e-6;
+/* Schedule view: a rolling 5 workdays from today, weekends skipped. Planning (roll-over, Find a slot)
+   still looks HORIZON workdays ahead so long jobs and far-out slots are worked out correctly. */
+const DAYS_SHOWN=5,HORIZON=60,EPS=1e-6;
 
 let vehicles=[], appts=[], cfg=null, syncInfo=null, view="schedule", stageSort="age", db=null, canWrite=true, editing=null, draft={}, techDraft=[], rmArmed=null;
 const $=id=>document.getElementById(id);
