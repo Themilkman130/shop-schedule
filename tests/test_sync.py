@@ -123,7 +123,7 @@ class PlanTests(unittest.TestCase):
             "vehicles": {
                 "s1": {"sample": True, "ro": "1"},
                 "sm-o-o-101": {"source": "shopmonkey", "stage": "Diagnosis", "spot": "Bay 2", "note": "keep me",
-                               "hoursLeft": 3, "boardTech": "Ann B."},
+                               "hoursLeft": 3},
                 "sm-o-old": {"source": "shopmonkey", "stage": "Ready For Pickup"},
                 "hand": {"ro": "999"},
             },
@@ -149,7 +149,7 @@ class PlanTests(unittest.TestCase):
         upd = next(w for w in self.writes(self.plan()) if w["doc_id"] == "sm-o-o-101")
         self.assertEqual(upd["op"], "update")
         self.assertEqual(upd["if_version"], 4)
-        for k in ("spot", "note", "schedOrder", "hoursLeft", "boardTech"):
+        for k in ("spot", "note", "schedOrder", "hoursLeft"):
             self.assertNotIn(k, upd["data"])
         self.assertEqual(upd["data"]["stage"], "In Progress")
 

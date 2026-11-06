@@ -380,17 +380,11 @@ function shares(x,kind){
   const f=want/total,parts=[];
   Object.entries(x.techHours||{}).forEach(([t,v])=>{if(num(v.left)>0)parts.push({tech:t,h:num(v.left)*f,a:num(v.auth)*f})});
   if(num(x.unassignedHours)>0)parts.push({tech:"",h:num(x.unassignedHours)*f,a:num(x.unassignedAuthHours)*f});
-  /* Board-assigned tech (picked in the Unassigned panel): fills only hours ShopMonkey gives no tech, or gives
-     to a tech who is off. Once ShopMonkey names an on tech for those hours, it stops applying by itself. */
-  const bt=x.boardTech&&matchTech(x.boardTech);
-  if(bt&&isOn(bt))parts.forEach(p=>{const t=p.tech?matchTech(p.tech):null;if(!p.tech||(t&&!isOn(t))){p.from=p.tech;p.tech=bt.name;p.board=true}});
-  const merged=[];parts.forEach(p=>{const m=merged.find(q=>q.tech===p.tech);if(m){m.h+=p.h;m.a+=p.a;m.board=m.board||p.board}else merged.push({...p})});
-  return {total:want,auth:totalAuth*f,parts:merged}}
-const boardActive=x=>shares(x,x.start?"appt":"veh").parts.some(p=>p.board);
+  return {total:want,auth:totalAuth*f,parts}}
 function hoursLine(sh){return sh.total>0?`${fmtH(sh.total)} h left · ${fmtH(sh.auth)} h authorized`:"No labor hours left"}
 function techLine(x){if(x.source!=="shopmonkey")return x.tech||"";
   const t=shares(x,x.start?"appt":"veh").parts.map(p=>{const m=p.tech?matchTech(p.tech):null;
-    return `${p.tech||"Unassigned"} ${fmtH(p.h)} h${p.board?" (board)":m&&!isOn(m)?" (off)":""}`});
+    return `${p.tech||"Unassigned"} ${fmtH(p.h)} h${m&&!isOn(m)?" (off)":""}`});
   return t.length?t.join(" · "):(x.tech||(x.orderTechs||[])[0]||"")}
 function orderFor(src,tech){const o=src.schedOrder;return o&&typeof o==="object"?o[tech||"_"]:o}
 
@@ -424,12 +418,12 @@ function buildSchedule(){
     const base={path:"vehicles/"+v.id,kind:"veh",src:v,release:0,tentative:false,
       label:[v.year,v.make,v.model].filter(Boolean).join(" "),sub:"RO "+(v.ro||"")+" · "+(v.customer||""),def:Date.parse(v.stageSince||0)-1e13};
     if(HOLD.includes(v.stage)){hold.push({...base,key:"v:"+v.id,tech:techLine(v),hours:sh.total,auth:sh.auth});return}
-    sh.parts.forEach(p=>jobs.push({...base,key:"v:"+v.id+":"+p.tech,tech:p.tech,hours:p.h,auth:p.a,board:!!p.board,order:orderFor(v,p.tech)}))});
+    sh.parts.forEach(p=>jobs.push({...base,key:"v:"+v.id+":"+p.tech,tech:p.tech,hours:p.h,auth:p.a,order:orderFor(v,p.tech)}))});
   appts.forEach(a=>{const release=idxFor(new Date(a.start));if(release>=days.length)return;
     const sh=shares(a,"appt"),base={path:"appointments/"+a.id,kind:"appt",src:a,release,tentative:!!a.tentative,label:vehName(a),
       sub:[a.customer,a.service].filter(Boolean).join(" · "),def:Date.parse(a.start),dropDay:dayStart(new Date(a.start))};
     if(!sh.parts.length){jobs.push({...base,key:"a:"+a.id+":",tech:a.tech||"",hours:0,auth:0,order:orderFor(a,a.tech)});return}
-    sh.parts.forEach(p=>jobs.push({...base,key:"a:"+a.id+":"+p.tech,tech:p.tech,hours:p.h,auth:p.a,board:!!p.board,order:orderFor(a,p.tech)}))});
+    sh.parts.forEach(p=>jobs.push({...base,key:"a:"+a.id+":"+p.tech,tech:p.tech,hours:p.h,auth:p.a,order:orderFor(a,p.tech)}))});
   const queues={};techs.forEach(t=>queues[t.name]=[]);
   jobs.forEach(j=>{const t=matchTech(j.tech);
     if(t&&!isOn(t))j.offTech=t.name;
@@ -475,7 +469,6 @@ function segItem(S,j,p,q,qi){const n=j.parts.length,k=j.parts.indexOf(p)+1;
   return `<div class="seg-item ${j.kind}${j.tentative?" tent":""}"><span class="h">${fmtH(p.h)} h</span><div class="body">
     <div class="veh">${esc(j.label||"Job")}</div><div class="meta">${esc(j.sub)}${j.kind==="veh"?" · in shop":""}${j.tentative?" · pencilled":""}</div>
     ${j.auth>EPS?`<span class="meta">${fmtH(j.auth)} of ${fmtH(j.hours)} h authorized</span>`:""}
-    ${j.board?`<span class="meta">Board-assigned, not yet in ShopMonkey · <button type="button" class="link" data-clearbt="${esc(j.path)}">Clear</button></span>`:""}
     ${partTxt?`<span class="part">${esc(partTxt)}</span>`:""}
     ${j.tentative&&k===1?`<button type="button" class="link" data-rm="${esc(j.src.id)}">${rmArmed===j.src.id?"Tap again to remove":"Remove"}</button>`:""}</div>
     <div class="mv"><button type="button" title="Move earlier in ${esc(j.techName)}'s line" aria-label="Move earlier" data-mv="up" data-key="${esc(j.key)}" ${qi===0||!canWrite?"disabled":""}>&#9650;</button>
@@ -595,8 +588,7 @@ function openEdit(id){
   $("d-ro").textContent="RO "+v.ro;$("d-veh").textContent=`${v.year} ${v.make} ${v.model}`;
   $("d-meta").textContent=[v.color,v.customer,techLine(v)||"No tech in ShopMonkey"].filter(Boolean).join(" · ");
   $("d-stage").innerHTML=stagePill(v.stage);spotPicks();
-  $("d-hours").innerHTML=v.source==="shopmonkey"?esc(`ShopMonkey: ${fmtH(num(v.smHoursLeft))} h left, ${fmtH(num(v.smAuthHoursLeft))} h authorized`)
-    +(boardActive(v)?`<br>Board-assigned to ${esc(v.boardTech)} (not in ShopMonkey yet) · <button type="button" class="link" data-clearbt="vehicles/${esc(v.id)}">Clear</button>`:""):"";
+  $("d-hours").textContent=v.source==="shopmonkey"?`ShopMonkey: ${fmtH(num(v.smHoursLeft))} h left, ${fmtH(num(v.smAuthHoursLeft))} h authorized`:"";
   $("d-left").value=hasNum(v.hoursLeft)?v.hoursLeft:"";$("d-note").value=v.note||"";$("d-err").hidden=true;
   $("d-save").disabled=!canWrite;
   if(!canWrite){$("d-err").textContent="You can view this board but not change it. Ask the owner for edit access.";$("d-err").hidden=false}
@@ -727,8 +719,7 @@ function unasRow(j){const r=unasReason(j),drop=j.kind==="veh"?"In shop now":"Dro
   const opts=activeTechs().map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
   const fix=j.tentative?`<div class="assign"><select data-assign="${esc(j.src.id)}" aria-label="Assign tech"><option value="">Assign to…</option>${opts}</select></div>`
     :j.hours<=0?`<span class="meta">Add labor hours in ShopMonkey</span>`
-    :canWrite?`<div class="assign"><select data-board="${esc(j.path)}" aria-label="Assign tech on the board"><option value="">Assign to…</option>${opts}</select><span class="meta">Board only. Also assign in ShopMonkey.</span></div>`
-    :`<span class="meta">Assign the tech in ShopMonkey; it leaves this list at the next sync</span>`;
+    :`<span class="meta">${j.offTech?`Turn ${esc(j.offTech)} on in Shop &amp; tech hours, or reassign in ShopMonkey`:"Assign the tech in ShopMonkey; it leaves this list at the next sync"}</span>`;
   const inner=`<span class="h">${j.hours>0?fmtH(j.hours)+" h":"?"}</span><div class="body">
     <div class="veh">${esc(j.label||"Job")}</div><div class="meta">${esc(j.sub)}</div>
     <div class="meta">${esc(drop)}${j.auth>EPS?` · ${fmtH(j.auth)} h authorized`:""}</div>
@@ -750,12 +741,7 @@ $("tally").addEventListener("click",e=>{if(e.target.closest("[data-unas]"))openU
 $("u-sort").onclick=e=>{const b=e.target.closest("[data-us]");if(!b)return;unasSort=b.dataset.us;store.set("pb-unas-sort",unasSort);renderUnas()};
 $("u-close").onclick=()=>$("udlg").close();
 $("u-list").addEventListener("click",e=>{if(e.target.closest("select"))return;const r=e.target.closest("[data-uid]");if(!r)return;$("udlg").close();openEdit(r.dataset.uid)});
-$("u-list").addEventListener("change",e=>{const s=e.target.closest("[data-assign]");if(s)return assignAppt(s.dataset.assign,s.value);
-  const b=e.target.closest("[data-board]");if(b&&b.value)setBoardTech(b.dataset.board,b.value)});
-async function setBoardTech(path,tech){try{await db.doc(path).update({boardTech:tech||null});toast(tech?`Assigned to ${tech} on the board. Remember to assign it in ShopMonkey too.`:"Board assignment cleared.",true)}
-  catch(e){toast(e&&e.code==="invalid_argument"?"This board is view-only for you.":"Couldn't save. Check the connection and try again.")}}
-document.addEventListener("click",e=>{const c=e.target.closest("[data-clearbt]");if(!c)return;e.preventDefault();e.stopPropagation();
-  setBoardTech(c.dataset.clearbt,null);if($("dlg").open)$("dlg").close()},true);
+$("u-list").addEventListener("change",e=>{const s=e.target.closest("[data-assign]");if(s)assignAppt(s.dataset.assign,s.value)});
 $("udlg").addEventListener("click",e=>{if(e.target===$("udlg"))$("udlg").close()});
 
 /* ---------- past-due panel (opened from the header count) ---------- */
