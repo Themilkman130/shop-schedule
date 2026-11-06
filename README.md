@@ -30,7 +30,9 @@ Board documents written by the sync have `source: "shopmonkey"` and ids
   (ShopMonkey status), stage date, due date, techs, hours left per tech split
   into authorized / not authorized.
 - **Board only (never written by the sync):** `spot`, `note`, `schedOrder`,
-  `hoursLeft` (a manual override of ShopMonkey's hours).
+  `hoursLeft` (a manual override of ShopMonkey's hours), `boardTech` (a tech
+  picked on the board for hours ShopMonkey has no tech for, or gives to an
+  off tech; it stops applying once ShopMonkey names an on tech).
 - **Each run** also sets `config/sync` (`lastRun`, counts); the board header shows it and turns red after 3 hours.
 - **Removed:** cars whose order is archived or leaves the in-shop statuses;
   appointments that have arrived, passed or been cancelled; pencilled jobs

@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 SOURCE = "shopmonkey"
 # Fields only people change on the board. The sync never writes them.
-BOARD_FIELDS = ("spot", "note", "schedOrder", "hoursLeft")
+BOARD_FIELDS = ("spot", "note", "schedOrder", "hoursLeft", "boardTech")
 
 
 def norm(s) -> str:
