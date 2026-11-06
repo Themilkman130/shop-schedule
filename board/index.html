@@ -120,6 +120,7 @@ body:not(.tv) .spots .card{cursor:grab}
 .spots{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(220px*var(--scale)),1fr));gap:12px}
 .spot.bldg .lane-h h2::before{content:"";display:inline-block;width:.5em;height:.5em;background:var(--accent);margin-right:.4em;vertical-align:.12em}
 .spot.open{border-style:dashed}
+.dflt{font-family:var(--f-body);font-size:.55em;font-weight:600;letter-spacing:.06em;color:var(--muted);vertical-align:.2em}
 .spot.open .lane-h h2{color:var(--muted)}
 
 .card{width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--muted);
@@ -281,6 +282,7 @@ body.tv .mv{display:none}
         <label for="s-lunch">Lunch starts<input id="s-lunch" type="time" value="12:00"></label>
         <label for="s-lunchh">Lunch length (h)<input id="s-lunchh" type="number" min="0" max="3" step="0.25" value="1"></label>
       </div>
+      <label for="s-dspot">Default spot for cars not yet placed<select id="s-dspot"><option value="">None (show a No spot column)</option></select></label>
       <div class="cap-sum" id="s-len"></div>
       <div class="hgrid" id="s-rows"></div>
       <button class="btn" type="button" id="s-add">Add tech</button>
@@ -296,6 +298,11 @@ body.tv .mv{display:none}
 const STAGES=["Diagnosis","Service Advisor Review","Parts Hold","In Progress","Kniesels In Process","Completed / File Review","Ready For Pickup"];
 const READY="Ready For Pickup";
 const SPOTS=["Building 1","Building 2","Off Lot (sublet)","Kniesels Backlot"];
+/* A car nobody has placed sits in the default spot (set in Shop & tech hours). Nothing is written to
+   the car, so changing the default moves every unplaced car; a car placed by hand keeps its spot. */
+function defaultSpot(){const d=cfg&&cfg.defaultSpot;return SPOTS.includes(d)?d:""}
+const placed=v=>SPOTS.includes(v.spot);
+const spotOf=v=>placed(v)?v.spot:defaultSpot();
 const HOLD=["Service Advisor Review","Parts Hold"];
 const LIMITS={"Diagnosis":[3,6],"Service Advisor Review":[2,24],"Parts Hold":[24,72],"In Progress":[8,24],"Kniesels In Process":[24,72],"Completed / File Review":[2,8],"Ready For Pickup":[24,72]};
 const VIEWS=["schedule","today","stage","spot"];
@@ -402,9 +409,9 @@ function project(S,techName,release,hours){const T=S.techs.find(t=>t.name===tech
 
 /* ---------- items ---------- */
 function card(v,showStage){
-  const lv=level(v),h=hoursSince(v.stageSince),isLot=/lot/i.test(v.spot||"");
+  const lv=level(v),h=hoursSince(v.stageSince),sp=spotOf(v),isLot=/lot/i.test(sp);
   return `<button class="card s-${lv}" data-id="${esc(v.id)}" type="button">
-    <div class="row"><span class="ro">RO ${esc(v.ro)}</span><span class="where${isLot?" lot":""}">${esc(v.spot||"No spot")}</span></div>
+    <div class="row"><span class="ro">RO ${esc(v.ro)}</span><span class="where${isLot?" lot":""}">${esc(sp||"No spot")}</span></div>
     <div class="veh">${esc(v.year)} ${esc(v.make)} ${esc(v.model)}</div>
     ${v.color?`<div class="meta">${esc(v.color)}</div>`:""}
     <div class="meta">${esc(v.customer)}</div>
@@ -508,12 +515,12 @@ function renderFloor(main){
       return `<section class="lane stagelane ${stCls(s)}"><div class="lane-h"><h2>${s}</h2><span class="n">${list.length}</span></div>
       <div class="stack">${body(list)}</div></section>`}).join("")}</div>`;
   }else{
-    const other=vehicles.filter(v=>!SPOTS.includes(v.spot)).sort(order);
-    const groups=SPOTS.map(s=>[s,vehicles.filter(v=>v.spot===s).sort(order)]);
-    groups.push(["No spot",other]);
+    const def=defaultSpot();
+    const groups=SPOTS.map(s=>[s,vehicles.filter(v=>spotOf(v)===s).sort(order)]);
+    if(!def)groups.push(["No spot",vehicles.filter(v=>!placed(v)).sort(order)]);
     const hint=canDrag()?`<div class="sortbar"><span class="meta">Drag a car onto another spot to move it. Click a car for details.</span></div>`:"";
     main.innerHTML=`${hint}<div class="spots">${groups.map(([s,list])=>`<section class="lane spot ${s.startsWith("Building")?"bldg":""} ${list.length?"":"open"}" data-spot="${esc(s==="No spot"?"":s)}">
-      <div class="lane-h"><h2>${s}</h2><span class="n">${list.length?list.length:"Open"}</span></div>
+      <div class="lane-h"><h2>${s}${s===def?' <span class="dflt">default</span>':""}</h2><span class="n">${list.length?list.length:"Open"}</span></div>
       <div class="stack">${list.map(v=>card(v,true)).join("")}</div></section>`).join("")}</div>`}}
 
 function render(){
@@ -539,11 +546,15 @@ function render(){
 /* ---------- vehicle edit ---------- */
 function picks(el,opts,key){el.innerHTML=opts.map(o=>`<button type="button" aria-pressed="${draft[key]===o}" data-v="${esc(o)}">${esc(o)}</button>`).join("");
   el.onclick=e=>{const b=e.target.closest("button");if(!b)return;draft[key]=b.dataset.v;picks(el,opts,key)}}
+function spotPicks(){const el=$("d-spot"),def=defaultSpot();
+  el.innerHTML=SPOTS.map(o=>{const on=draft.spot===o||(!draft.spot&&o===def);
+    return `<button type="button" aria-pressed="${on}" data-v="${esc(o)}">${esc(o)}${!draft.spot&&o===def?" (default)":""}</button>`}).join("");
+  el.onclick=e=>{const b=e.target.closest("button");if(!b)return;draft.spot=b.dataset.v;spotPicks()}}
 function openEdit(id){
-  const v=vehicles.find(x=>x.id===id);if(!v)return;editing=v;draft={spot:v.spot};
+  const v=vehicles.find(x=>x.id===id);if(!v)return;editing=v;draft={spot:placed(v)?v.spot:""};
   $("d-ro").textContent="RO "+v.ro;$("d-veh").textContent=`${v.year} ${v.make} ${v.model}`;
   $("d-meta").textContent=[v.color,v.customer,techLine(v)||"No tech in ShopMonkey"].filter(Boolean).join(" · ");
-  $("d-stage").innerHTML=stagePill(v.stage);picks($("d-spot"),SPOTS,"spot");
+  $("d-stage").innerHTML=stagePill(v.stage);spotPicks();
   $("d-hours").textContent=v.source==="shopmonkey"?`ShopMonkey: ${fmtH(num(v.smHoursLeft))} h left, ${fmtH(num(v.smAuthHoursLeft))} h authorized`:"";
   $("d-left").value=hasNum(v.hoursLeft)?v.hoursLeft:"";$("d-note").value=v.note||"";$("d-err").hidden=true;
   $("d-save").disabled=!canWrite;
@@ -613,7 +624,8 @@ function sumCap(){const s=draftShop(),L=lenOf(s);
   const on=techDraft.filter(t=>t.active!==false),per=WORK.map(d=>on.reduce((a,t)=>a+Math.min(L,num(t.hours[d])),0));
   const off=techDraft.length-on.length;
   $("s-sum").textContent=techDraft.length?"Shop total"+(off?` (${on.length} on, ${off} off)`:"")+": "+WORK.map((d,i)=>`${DOW_NAMES[d]} ${fmtH(per[i])} h`).join(" · "):""}
-function openCap(){const s=shop();$("s-open").value=s.open;$("s-close").value=s.close;$("s-lunch").value=s.lunchStart;$("s-lunchh").value=s.lunchHours;
+function openCap(){$("s-dspot").innerHTML=`<option value="">None (show a No spot column)</option>`+SPOTS.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("");
+  $("s-dspot").value=defaultSpot();const s=shop();$("s-open").value=s.open;$("s-close").value=s.close;$("s-lunch").value=s.lunchStart;$("s-lunchh").value=s.lunchHours;
   techDraft=techList().map(t=>({name:t.name,active:isOn(t),hours:Object.fromEntries(WORK.map(d=>[d,techLimit(t,d)]))}));
   techRows();$("s-err").hidden=true;$("s-save").disabled=!canWrite;$("sdlg").showModal()}
 ["s-open","s-close","s-lunch","s-lunchh"].forEach(i=>$(i).addEventListener("input",()=>{if(techDraft.length)readRows();sumCap()}));
@@ -625,7 +637,7 @@ $("s-cancel").onclick=()=>$("sdlg").close();
 $("s-save").onclick=async()=>{if(techDraft.length)readRows();
   const s=draftShop();if(lenOf(s)<=0){$("s-err").textContent="Closing time has to be after opening time plus lunch.";$("s-err").hidden=false;return}
   $("s-save").disabled=true;
-  try{await db.doc("config/shop").set({...s,techs:techDraft.filter(t=>t.name)});$("sdlg").close()}
+  try{await db.doc("config/shop").set({...s,defaultSpot:$("s-dspot").value,techs:techDraft.filter(t=>t.name)});$("sdlg").close()}
   catch(e){showErr("s-err",e)}finally{$("s-save").disabled=!canWrite}};
 
 /* ---------- drag cars between spots (By spot view; off in TV mode and for view-only users) ----------
@@ -656,7 +668,7 @@ window.addEventListener("pointerup",async e=>{
   if(!drag||e.pointerId!==drag.pid)return;const d=drag,was=d.on;endDrag();
   if(!was)return;noClickUntil=Date.now()+400;
   const v=vehicles.find(x=>x.id===d.id),spot=d.over?d.over.dataset.spot:null;
-  if(!v||spot==null||(SPOTS.includes(v.spot)?v.spot:"")===spot){render();return}
+  if(!v||spot==null||spotOf(v)===spot){render();return}
   const old=v.spot;v.spot=spot;render();
   try{await db.doc("vehicles/"+v.id).update({spot})}
   catch(err){v.spot=old;render();toast(err&&err.code==="invalid_argument"?"This board is view-only for you.":"Couldn't move the car. Check the connection and try again.");
@@ -688,6 +700,8 @@ $("main").addEventListener("change",e=>{const s=e.target.closest("[data-assign]"
 $("d-cancel").onclick=()=>$("dlg").close();$("d-save").onclick=saveEdit;
 $("p-cancel").onclick=()=>$("pdlg").close();$("p-save").onclick=savePencil;
 const anyOpen=()=>["dlg","pdlg","sdlg"].some(i=>$(i).open)||!!(drag&&drag.on);
+/* Updates that arrive while a dialog is open are held back; draw them as soon as it closes. */
+["dlg","pdlg","sdlg"].forEach(i=>$(i).addEventListener("close",()=>render()));
 function tick(){const n=new Date();$("clock").innerHTML=`<span class="d">${esc(n.toLocaleDateString([], {weekday:"short",month:"short",day:"numeric"}))}</span>${esc(n.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}))}`}
 tick();setInterval(()=>{tick();if(!anyOpen()&&!(document.activeElement&&document.activeElement.matches("main select")))render()},60000);
 
