@@ -39,6 +39,13 @@ h1{margin:0;font-family:var(--f-display);font-weight:700;font-size:2.1em;letter-
 .tally b{font-family:var(--f-display);font-size:1.9em;font-variant-numeric:tabular-nums}
 .tally span{font-size:.72em;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .tally .alert b{color:var(--bad)}
+.tally .tbtn{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05;border:1px solid transparent;background:none;border-radius:6px;padding:2px 6px;margin:-3px -7px;cursor:pointer;color:inherit}
+.tally .tbtn:hover{border-color:var(--line);background:var(--card)}
+.tally .tbtn span{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+#udlg{width:min(620px,calc(100% - 32px))}
+.ulist{display:grid;gap:8px;max-height:min(62vh,640px);overflow:auto;padding-right:2px}
+.urow{width:100%;text-align:left;font:inherit;color:inherit}
+button.urow{cursor:pointer}button.urow:hover{border-color:var(--muted)}
 .controls{display:flex;gap:8px;flex-wrap:wrap}
 .seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{border:0;background:transparent;padding:7px 12px;cursor:pointer;font-weight:500}
@@ -293,6 +300,16 @@ body.tv .mv{display:none}
   </form>
 </dialog>
 
+<dialog id="udlg" aria-labelledby="u-title">
+  <div class="dlg-h"><h2 id="u-title">Unassigned</h2><div class="meta" id="u-sum"></div></div>
+  <div class="dlg-b">
+    <div class="sortbar"><span class="meta">Sort</span><div class="seg" role="group" aria-label="Sort unassigned jobs" id="u-sort">
+      <button type="button" data-us="reason">Reason</button><button type="button" data-us="hours">Most hours</button><button type="button" data-us="soon">Soonest</button></div></div>
+    <div class="ulist" id="u-list"></div>
+  </div>
+  <div class="dlg-f"><button class="btn" type="button" id="u-close">Close</button></div>
+</dialog>
+
 <script>
 /* Stages are ShopMonkey's workflow statuses for cars on the lot; the sync keeps them current. */
 const STAGES=["Diagnosis","Service Advisor Review","Parts Hold","In Progress","Kniesels In Process","Completed / File Review","Ready For Pickup"];
@@ -535,7 +552,7 @@ function render(){
   const late=vehicles.filter(v=>v.promised&&Date.parse(v.promised)<Date.now()&&v.stage!==READY).length;
   $("tally").innerHTML=`<div><b>${todayOpen==null?"Closed":fmtH(todayOpen)}</b><span>Open h today</span></div>
     <div><b>${fmtH(week)}</b><span>Open h next 5 days</span></div>
-    <div class="${S.unassigned.length?"alert":""}"><b>${S.unassigned.length}</b><span>Unassigned</span></div>
+    <button type="button" class="tbtn ${S.unassigned.length?"alert":""}" data-unas="1" title="Show the unassigned jobs" aria-haspopup="dialog"><b>${S.unassigned.length}</b><span>Unassigned</span></button>
     <div><b>${vehicles.length}</b><span>Cars on site</span></div>
     <div class="${late?"alert":""}"><b>${late}</b><span>Past due</span></div>
     ${syncInfo&&syncInfo.lastRun?`<div class="${hoursSince(syncInfo.lastRun)>3?"alert":""}"><b>${esc(fmtTime(syncInfo.lastRun))}</b><span>ShopMonkey sync${sameDay(syncInfo.lastRun,new Date())?"":" "+esc(wd(syncInfo.lastRun))}</span></div>`:""}`;
@@ -675,6 +692,41 @@ window.addEventListener("pointerup",async e=>{
     if(err&&err.code==="invalid_argument")canWrite=false}});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&drag){endDrag();render()}});
 
+/* ---------- unassigned panel (opened from the header count) ---------- */
+let unasSort="reason";
+function unasReason(j){if(j.offTech)return `Assigned to ${j.offTech} (off)`;if(j.hours<=0)return "Needs labor hours";
+  if(j.tech&&!matchTech(j.tech))return `Tech "${j.tech}" isn't on the hours list`;
+  return j.tentative?"Pencilled, no tech picked":"No tech on the labor lines"}
+const REASON_ORDER=r=>r.startsWith("No tech on")?0:r.startsWith("Assigned to")?1:r.startsWith("Needs")?2:3;
+function unasWhen(j){return j.kind==="veh"?-Infinity:Date.parse(j.src.start)||Infinity}
+function unasRow(j){const r=unasReason(j),drop=j.kind==="veh"?"In shop now":"Drops off "+fmtDay(j.src.start)+" "+fmtTime(j.src.start);
+  const opts=activeTechs().map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
+  const fix=j.tentative?`<div class="assign"><select data-assign="${esc(j.src.id)}" aria-label="Assign tech"><option value="">Assign to…</option>${opts}</select></div>`
+    :`<span class="meta">${j.offTech?`Turn ${esc(j.offTech)} on in Shop &amp; tech hours, or reassign in ShopMonkey`:"Assign the tech in ShopMonkey; it leaves this list at the next sync"}</span>`;
+  const inner=`<span class="h">${j.hours>0?fmtH(j.hours)+" h":"?"}</span><div class="body">
+    <div class="veh">${esc(j.label||"Job")}</div><div class="meta">${esc(j.sub)}</div>
+    <div class="meta">${esc(drop)}${j.auth>EPS?` · ${fmtH(j.auth)} h authorized`:""}</div>
+    <span class="warnline">${esc(r)}</span>${fix}</div>`;
+  return j.kind==="veh"?`<button type="button" class="seg-item veh urow" data-uid="${esc(j.src.id)}">${inner}<span class="meta">Open ›</span></button>`
+    :`<div class="seg-item appt urow${j.tentative?" tent":""}">${inner}<span></span></div>`}
+function renderUnas(){const S=buildSchedule(),list=S.unassigned.slice(),tot=list.reduce((a,j)=>a+j.hours,0);
+  $("u-sum").textContent=list.length?`${list.length} job${list.length>1?"s":""} · ${fmtH(tot)} h`:"Nothing unassigned";
+  document.querySelectorAll("#u-sort [data-us]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.us===unasSort));
+  const bySoon=(a,b)=>unasWhen(a)-unasWhen(b)||b.hours-a.hours;
+  if(!list.length){$("u-list").innerHTML=`<div class="empty">Every job has a tech.</div>`;return}
+  if(unasSort==="hours"){list.sort((a,b)=>b.hours-a.hours||bySoon(a,b));$("u-list").innerHTML=list.map(unasRow).join("");return}
+  if(unasSort==="soon"){list.sort(bySoon);$("u-list").innerHTML=list.map(unasRow).join("");return}
+  const g=new Map();list.sort(bySoon).forEach(j=>{const r=unasReason(j),k=r.startsWith("Assigned to")?r:r.startsWith("Tech \"")?"Tech not on the hours list":r;if(!g.has(k))g.set(k,[]);g.get(k).push(j)});
+  $("u-list").innerHTML=[...g.keys()].sort((a,b)=>REASON_ORDER(a)-REASON_ORDER(b)||a.localeCompare(b)).map(k=>{const js=g.get(k);
+    return `<div class="grp">${esc(k)} · ${js.length} · ${fmtH(js.reduce((a,j)=>a+j.hours,0))} h</div>${js.map(unasRow).join("")}`}).join("")}
+function openUnas(){if(cfg===null)return;renderUnas();$("udlg").showModal()}
+$("tally").addEventListener("click",e=>{if(e.target.closest("[data-unas]"))openUnas()});
+$("u-sort").onclick=e=>{const b=e.target.closest("[data-us]");if(!b)return;unasSort=b.dataset.us;store.set("pb-unas-sort",unasSort);renderUnas()};
+$("u-close").onclick=()=>$("udlg").close();
+$("u-list").addEventListener("click",e=>{if(e.target.closest("select"))return;const r=e.target.closest("[data-uid]");if(!r)return;$("udlg").close();openEdit(r.dataset.uid)});
+$("u-list").addEventListener("change",e=>{const s=e.target.closest("[data-assign]");if(s)assignAppt(s.dataset.assign,s.value)});
+$("udlg").addEventListener("click",e=>{if(e.target===$("udlg"))$("udlg").close()});
+
 /* ---------- wiring ---------- */
 function markView(){document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.view===view))}
 function setView(v){view=v;markView();store.set("pb-view",v);render()}
@@ -699,13 +751,14 @@ $("main").addEventListener("click",e=>{if(e.target.closest("[data-cap]")){openCa
 $("main").addEventListener("change",e=>{const s=e.target.closest("[data-assign]");if(s)assignAppt(s.dataset.assign,s.value)});
 $("d-cancel").onclick=()=>$("dlg").close();$("d-save").onclick=saveEdit;
 $("p-cancel").onclick=()=>$("pdlg").close();$("p-save").onclick=savePencil;
-const anyOpen=()=>["dlg","pdlg","sdlg"].some(i=>$(i).open)||!!(drag&&drag.on);
+const anyOpen=()=>["dlg","pdlg","sdlg","udlg"].some(i=>$(i).open)||!!(drag&&drag.on);
 /* Updates that arrive while a dialog is open are held back; draw them as soon as it closes. */
-["dlg","pdlg","sdlg"].forEach(i=>$(i).addEventListener("close",()=>render()));
+["dlg","pdlg","sdlg","udlg"].forEach(i=>$(i).addEventListener("close",()=>render()));
 function tick(){const n=new Date();$("clock").innerHTML=`<span class="d">${esc(n.toLocaleDateString([], {weekday:"short",month:"short",day:"numeric"}))}</span>${esc(n.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}))}`}
 tick();setInterval(()=>{tick();if(!anyOpen()&&!(document.activeElement&&document.activeElement.matches("main select")))render()},60000);
 
 stageSort=store.get("pb-stage-sort")==="tech"?"tech":"age";
+{const u=store.get("pb-unas-sort");if(["reason","hours","soon"].includes(u))unasSort=u}
 {const h=location.hash.slice(1),s=store.get("pb-view");view=VIEWS.includes(h)?h:VIEWS.includes(s)?s:"schedule";markView()}
 if(location.hash==="#tv"||store.get("pb-tv"))document.body.classList.add("tv"),$("tv-btn").setAttribute("aria-pressed","true");
 render();
@@ -715,7 +768,7 @@ render();
   if(!db){$("main").innerHTML=`<div class="state"><h2>Board offline</h2>Sign in to claude.ai to see the shop's schedule.</div>`;return}
   try{const user=await window.claude.use("user");const w=user?await user.can("data.write"):null;if(w===false)canWrite=false}catch(e){}
   const lost=()=>{$("main").innerHTML=`<div class="state"><h2>Lost connection</h2>Reload the page to reconnect the board.</div>`};
-  const redraw=()=>{if(!anyOpen())render()};
+  const redraw=()=>{if(!anyOpen())render();else if($("udlg").open)renderUnas()};
   db.doc("config/shop").onSnapshot(s=>{cfg=s.exists?s.data():{techs:[]};redraw()},lost);
   db.doc("config/sync").onSnapshot(s=>{syncInfo=s.exists?s.data():null;redraw()},()=>{});
   db.collection("vehicles").onSnapshot(snap=>{vehicles=snap.docs.map(d=>({id:d.id,...d.data()}));redraw()},lost);
